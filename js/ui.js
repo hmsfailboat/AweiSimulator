@@ -137,7 +137,7 @@
           <button class="btn big" data-act="gallery">📖 結局與成就 <span class="pill">${endingsGot}/${Object.keys(AW.ENDINGS).length}</span></button>
           <button class="btn ghost" data-act="help">❓ 遊戲說明</button>
         </div>
-        <p class="foot">已重生 ${m.runs} 次 · 致敬遊戲天才阿維</p>
+        <p class="foot">已重生 ${m.runs} 次 · 致敬遊戲天才阿維 · v${AW.VERSION}</p>
       </div>`;
     },
 

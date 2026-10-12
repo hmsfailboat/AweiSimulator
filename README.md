@@ -21,5 +21,8 @@
 | `tools/sim.js` | 平衡模擬：`node tools/sim.js 1000` |
 | `docs/PLAN.md` | 實作企劃 |
 
+## 版本紀錄
+見 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 更新網站
 修改後 `git commit` 並 `git push`，GitHub Pages 會在一兩分鐘內自動更新。
