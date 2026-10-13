@@ -112,7 +112,8 @@
         : e.rank === 3 ? (st.tech + st.leader) / 2
         : st.leader * 0.5 + st.social * 0.3 + st.tech * 0.2;
       const steady = AW.traitOf(s).clutch ? 0.6 : 1;
-      const score = rel - e.rank * 6 + s.yearPerf * 4 + (st.mood - 50) / 5 + AW.randInt(-12, 12) * steady;
+      const score = rel - e.rank * 6 + s.yearPerf * 4 + (st.mood - 50) / 5 + AW.randInt(-12, 12) * steady
+        - (st.health < AW.TIER.low ? 4 : 0);
       const grade = GRADES.find((g) => score >= g.min);
       e.promo = Math.max(0, e.promo + grade.pts);
       e.lastGrade = grade.g;
@@ -158,7 +159,7 @@
       const e = s.eng;
       const st = s.stats;
       const score = 0.4 * st.tech + 0.35 * st.leader + 0.25 * st.social + s.yearSp * 3 + (s.flags.startupIdea ? 8 : 0)
-        + AW.randInt(-15, 15) - e.startup * 7;
+        + AW.randInt(-15, 15) - e.startup * 7 - (st.health < AW.TIER.low ? 4 : 0);
       let result;
       if (score >= 58) {
         e.startup += 1;

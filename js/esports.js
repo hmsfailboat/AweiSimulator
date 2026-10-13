@@ -46,7 +46,8 @@
     mainStat(s) { return s.stats[s.esports.game]; },
     power(s) {
       const st = s.stats;
-      return 0.5 * this.mainStat(s) + 0.25 * st.reflex + 0.15 * st.teamwork + 0.1 * st.mood;
+      return 0.5 * this.mainStat(s) + 0.25 * st.reflex + 0.15 * st.teamwork + 0.1 * st.mood - (s.yearFlags.lag ? 4 : 0)
+        - (st.health < AW.TIER.low ? 3 : 0);
     },
     teamPower(s) { return 0.45 * this.power(s) + 0.55 * TIERS[s.esports.tier].mates; },
     winProb(T, opp, bonus) { return AW.clamp(1 / (1 + Math.exp(-(T - opp) / 6)) + (bonus || 0), 0.02, 0.98); },

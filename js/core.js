@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const AW = (root.AW = root.AW || {});
-  AW.VERSION = '1.0'; // 發布新版時同步更新 CHANGELOG.md
+  AW.VERSION = '1.1'; // 發布新版時同步更新 CHANGELOG.md
 
   // ---------- 隨機數（mulberry32，可存檔重現） ----------
   AW.rng = {
@@ -54,6 +54,7 @@
     leader:   { name: '領導力',        short: '領導', icon: '👔', kind: 'skill' },
     health:   { name: '健康',          short: '健康', icon: '❤️', kind: 'cond' },
     mood:     { name: '心情',          short: '心情', icon: '😊', kind: 'cond' },
+    love:     { name: '好感度',        short: '好感', icon: '💗', kind: 'cond' },
     fame:     { name: '名氣',          short: '名氣', icon: '⭐', kind: 'skill' },
     money:    { name: '金錢',          short: '金錢', icon: '💰', kind: 'res' },
   };
@@ -83,14 +84,35 @@
     if (g[key]) m *= 1 + g[key];
     if (g.all && key !== 'fame') m *= 1 + g.all;
     if (g.game && (key === 'fps' || key === 'dota')) m *= 1 + g.game;
+    if (AW.Shop) m *= 1 + AW.Shop.bonus(s, 'growth', key);
     m *= 1 + 0.04 * (s.memory || 0);
     if (key === 'reflex' && s.age < 12) m *= 1.3;
     if ((key === 'fps' || key === 'dota') && s.age >= 6 && s.age <= 15) m *= 1.15;
     if (key !== 'fame') {
-      if (s.stats.mood >= 70) m *= 1.1;
-      else if (s.stats.mood < 30) m *= 0.85;
+      if (s.stats.mood >= AW.TIER.good) m *= 1.1;
+      else if (s.stats.mood < AW.TIER.low) m *= 0.85;
+      if (s.stats.health < AW.TIER.low) m *= 0.85;
     }
     return m;
+  };
+
+  // 健康／心情狀態門檻：≥ good 良好、< low 低落、< bad 危險
+  AW.TIER = { good: 70, low: 40, bad: 20 };
+  // 擲骰修正：健康好 +5%、心情差 -5%
+  AW.rollMod = (s) => (s.stats.health >= AW.TIER.good ? 0.05 : 0) - (s.stats.mood < AW.TIER.low ? 0.05 : 0);
+  // 目前的狀態標籤（文字在 texts.js 的 [status]）
+  AW.statusList = (s) => {
+    const out = [];
+    const h = s.stats.health;
+    const m = s.stats.mood;
+    if (h >= AW.TIER.good) out.push('vigor');
+    else if (h < AW.TIER.bad) out.push('frail');
+    else if (h < AW.TIER.low) out.push('tired');
+    if (m >= AW.TIER.good) out.push('happy');
+    else if (m < AW.TIER.bad) out.push('depressed');
+    else if (m < AW.TIER.low) out.push('low');
+    if (s.flags.chronic) out.push('chronic');
+    return out;
   };
 
   AW.DIM = { cap: 120, pow: 1.8 };
@@ -118,7 +140,10 @@
       if (def.kind === 'res') {
         s.stats[key] = Math.round(cur + v);
       } else if (def.kind === 'cond') {
-        if (v < 0 && trait.drain && trait.drain[key]) v *= 1 - trait.drain[key];
+        if (v < 0) {
+          const drain = ((trait.drain && trait.drain[key]) || 0) + (AW.Shop ? AW.Shop.bonus(s, 'drain', key) : 0);
+          if (drain) v *= 1 - Math.min(drain, 0.7);
+        }
         v = Math.round(v);
         s.stats[key] = AW.clamp(cur + v, 0, 100);
       } else {

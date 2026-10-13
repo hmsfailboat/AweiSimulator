@@ -2,6 +2,7 @@
 (function (root) {
   'use strict';
   const AW = root.AW;
+  AW.Text.apply(); // 把 js/data/texts.js 的文字填進各資料
   const SAVE_KEY = 'awei.save.v1';
   const META_KEY = 'awei.meta.v1';
   const storage = (() => {
@@ -64,6 +65,11 @@
       try {
         const s = storage && JSON.parse(storage.getItem(SAVE_KEY));
         if (!s || s.version !== 1 || s.phase === 'ended') return null;
+        // 舊存檔相容：道具、感情系統
+        s.items = s.items || {};
+        s.life = s.life || { n: 0, health: 0, mood: 0 };
+        if (s.love === undefined) s.love = null;
+        if (!s.love && s.flags.girlfriend) { AW.Love.start(s); s.love.since = Math.max(13, s.age - 1); }
         AW.rng.seed(s.rng);
         return s;
       } catch (e) { return null; }
@@ -106,8 +112,8 @@
         trait: opts.trait,
         memory: m.upgrades.memory || 0,
         stats: { fps: 0, dota: 0, reflex: 0, study: 0, social: 0, teamwork: 0, tech: 0, leader: 0,
-          health: 80, mood: 80, fame: 0, money: (m.upgrades.rich || 0) * 100000 },
-        flags: {}, yearFlags: {}, nextYearFlags: {}, counters: {},
+          health: 80, mood: 80, love: 0, fame: 0, money: (m.upgrades.rich || 0) * 100000 },
+        flags: {}, yearFlags: {}, nextYearFlags: {}, counters: {}, items: {}, love: null, life: { n: 0, health: 0, mood: 0 },
         seen: {}, log: [], pendingEvents: [], eventResult: null, yearActions: [], yearNotes: [],
         yearStart: null, decision: null, pendingEnding: null, season: null, review: null,
         esports: null, eng: null, milestones: { tierUps: 0, promotions: 0 }, ending: null,
@@ -139,7 +145,11 @@
       let n = this.stage(s).slots;
       if (s.yearFlags.sick) n -= 1;
       if (s.yearFlags.burnout) n -= 1;
-      return Math.max(1, n);
+      if (s.yearFlags.busy) n -= 1;
+      if (s.yearFlags.blue) n -= 1;
+      n = Math.max(1, n);
+      if (s.yearFlags.extraSlot) n += 1;
+      return n;
     },
     title(s) {
       if (s.phase === 'esports') return `${AW.Esports.TIERS[s.esports.tier].name}・${s.esports.team}`;
@@ -198,7 +208,7 @@
     eventText(s, e) { return AW.val(e.text, s); },
 
     visibleChoices(s, e) {
-      return (e.choices || []).map((c, i) => ({ c, i, ok: !c.cond || c.cond(s) }));
+      return (e.choices || []).map((c, i) => ({ c, i, ok: !c.cond || c.cond(s) })).filter((x) => x.ok || !x.c.hideLocked);
     },
 
     /** 套用一個 outcome，回傳 { text, deltas } */
@@ -207,12 +217,11 @@
       if (o.year) for (const k of Object.keys(o.year)) s.yearFlags[k] = (s.yearFlags[k] || 0) + o.year[k];
       if (o.next) for (const k of Object.keys(o.next)) s.nextYearFlags[k] = (s.nextYearFlags[k] || 0) + o.next[k];
       if (o.flags) Object.assign(s.flags, o.flags);
-      let text = o.result || '';
-      if (o.run) {
-        const r = o.run(s) || {};
-        if (r.deltas) AW.mergeDeltas(deltas, r.deltas);
-        if (r.text) text = text ? text + ' ' + r.text : r.text;
-      }
+      const r = (o.run && o.run(s)) || {};
+      if (r.deltas) AW.mergeDeltas(deltas, r.deltas);
+      // 結果文字在 run 之後才取，才能用到 run 產生的變數（例：{另一半}）
+      let text = AW.val(o.result, s) || '';
+      if (r.text) text = text ? text + ' ' + r.text : r.text;
       return { text, deltas };
     },
 
@@ -225,12 +234,14 @@
       if (e.choices && e.choices.length) {
         const c = e.choices[idx];
         if (!c || (c.cond && !c.cond(s))) return null;
-        label = c.text;
+        label = AW.val(c.text, s);
         if (c.roll) {
-          const p = AW.val(c.roll.chance, s);
+          let p = AW.clamp(AW.val(c.roll.chance, s) + AW.rollMod(s), 0.02, 0.99);
+          const charm = (s.items && s.items.charm) > 0;
+          if (charm) { p = Math.min(0.99, p + AW.CHARM_BONUS); s.items.charm -= 1; }
           const ok = AW.chance(p);
           res = this.applyOutcome(s, ok ? c.roll.success : c.roll.fail);
-          res.roll = { p, ok };
+          res.roll = { p, ok, charm };
         } else {
           res = this.applyOutcome(s, c);
         }
@@ -238,7 +249,7 @@
         res = this.applyOutcome(s, e);
       }
       s.eventResult = res;
-      this.addLog(s, e.icon, `${e.title}${label ? `：${label}` : ''}${res.text ? ' — ' + res.text : ''}`);
+      this.addLog(s, e.icon, `${AW.val(e.title, s)}${label ? `：${label}` : ''}${res.text ? ' — ' + res.text : ''}`);
       Save.save(s);
       return res;
     },
@@ -262,11 +273,12 @@
     actionCost(s, a) {
       if (!a.cost) return 0;
       if (a.netcafe && AW.traitOf(s).freeNetcafe) return 0;
-      return a.cost;
+      return AW.val(a.cost, s);
     },
     availableActions(s) {
       const key = this.stageKey(s);
-      return AW.ACTIONS.filter((a) => a.stages.includes(key)).map((a) => Object.assign({ a }, this.actionState(s, a)));
+      return AW.ACTIONS.filter((a) => a.stages.includes(key) && !(a.hideLocked && a.cond && !a.cond(s)))
+        .map((a) => Object.assign({ a }, this.actionState(s, a)));
     },
 
     commitActions(s, ids) {
@@ -324,13 +336,56 @@
     yearEnd(s) {
       // 零用錢
       if (s.phase === 'student' && s.age >= 6) {
-        const mult = AW.traitOf(s).allowance || 1;
+        const mult = (AW.traitOf(s).allowance || 1) * (s.yearFlags.halfAllowance ? 0.5 : 1);
         AW.applyEffects(s, { money: s.age * 500 * mult });
       }
       if (s.phase === 'esports') AW.Esports.yearEnd(s);
       if (s.phase === 'engineer') AW.Engineer.yearEnd(s);
+      AW.Shop.yearEnd(s);
+      if (s.flags.dog) AW.applyEffects(s, { health: 2, mood: 2 });
+      AW.Love.yearEnd(s);
+      this.healthYear(s);
       this.checkVitals(s, false);
+      // 人生回顧：記錄每年的健康與心情
+      s.life.n += 1;
+      s.life.health += s.stats.health;
+      s.life.mood += s.stats.mood;
       this.checkAchievements(s);
+    },
+
+    STRESS: { teen: 2, adult: 4 },
+
+    // 長期健康：生活壓力、慢性病、體弱多病
+    healthYear(s) {
+      // 生活壓力：青少年與成人每年心情自然下降
+      const stress = s.phase === 'student' ? (s.age >= 12 ? this.STRESS.teen : 0) : this.STRESS.adult;
+      if (stress) AW.applyEffects(s, { mood: -stress });
+      if (s.flags.chronic) AW.applyEffects(s, { health: -4 });
+      if (s.stats.health < 30) {
+        s.counters.lowHealth = (s.counters.lowHealth || 0) + 1;
+        if (s.counters.lowHealth >= 3 && !s.flags.chronic) {
+          s.flags.chronic = 1;
+          this.note(s, '🩺', AW.tx('status', 'msg_chronic', s));
+        }
+      } else s.counters.lowHealth = 0;
+      if (s.stats.health > 0 && s.stats.health < AW.TIER.bad && !s.nextYearFlags.sick && AW.chance(0.5)) {
+        s.nextYearFlags.sick = 1;
+        this.note(s, '🤒', AW.tx('status', 'msg_frail', s));
+      }
+    },
+
+    // 一生平均健康／心情與評等
+    lifeAvg(s) {
+      const l = s.life || { n: 0 };
+      return l.n ? { health: l.health / l.n, mood: l.mood / l.n } : { health: s.stats.health, mood: s.stats.mood };
+    },
+    grade(v) { return v >= 80 ? 'S' : v >= 70 ? 'A' : v >= 60 ? 'B' : v >= 45 ? 'C' : 'D'; },
+
+    // 財富自由：35～49 歲、存款 1 億以上、心情好，可以提早退休
+    FIRE: { age: 35, maxAge: 49, money: 100000000 },
+    canFire(s) {
+      return s.phase !== 'student' && s.phase !== 'ended' && !s.pendingEnding && s.age >= this.FIRE.age && s.age <= this.FIRE.maxAge
+        && s.stats.money >= this.FIRE.money && s.stats.mood >= AW.TIER.good;
     },
 
     checkVitals(s, quiet) {
@@ -340,6 +395,11 @@
         s.nextYearFlags.sick = 1;
         const lost = AW.applyEffects(s, { best: -3, study: -2, mood: -10 }, { grow: false });
         this.note(s, '🚑', '身體撐不住，病倒住院了！下一年行動數 -1。');
+        if (s.flags.collapsed === 2) this.note(s, '⚠️', AW.tx('status', 'msg_warn', s));
+        if (s.flags.collapsed >= 3 && !s.pendingEnding) {
+          s.pendingEnding = 'burnout';
+          this.note(s, '🛏️', AW.tx('status', 'msg_final', s));
+        }
         return lost;
       }
       if (s.stats.mood <= 0) {
@@ -451,9 +511,15 @@
     },
 
     // ---------- 結局 ----------
+    PLAIN_ENDINGS: ['ordinary', 'pro_retire', 'senior_eng', 'startup_fail'],
+    HAPPY_MOOD: 75,
+
     finish(s, endingId) {
       if (s.phase === 'ended') return s.ending;
-      s.ending = { id: endingId };
+      const life = this.lifeAvg(s);
+      // 職涯普通，但一生快樂又成家 → 平凡但幸福
+      if (this.PLAIN_ENDINGS.includes(endingId) && life.mood >= this.HAPPY_MOOD && s.love && s.love.status === 'married') endingId = 'happy_life';
+      s.ending = { id: endingId, grades: { health: this.grade(life.health), mood: this.grade(life.mood) } };
       s.phase = 'ended';
       s.step = 'ended';
       const m = Meta.get();
@@ -463,10 +529,17 @@
       if (ms.career) parts.push(['踏入職涯', 2]);
       if (ms.tierUps) parts.push([`戰隊晉升 ×${ms.tierUps}`, ms.tierUps]);
       if (ms.promotions) parts.push([`職場升遷 ×${ms.promotions}`, ms.promotions]);
-      if (s.esports && s.esports.domesticTitles) parts.push([`國內冠軍 ×${s.esports.domesticTitles}`, 3 * s.esports.domesticTitles]);
+      // 國內冠軍：第一座 2 點，之後每座 +1，最多 5 點
+      if (s.esports && s.esports.domesticTitles) parts.push([`國內冠軍 ×${s.esports.domesticTitles}`, Math.min(5, 1 + s.esports.domesticTitles)]);
       if (s.esports && s.esports.bestWorlds >= 3) parts.push(['世界賽四強', 3]);
       if (endingId === 'world_champ') parts.push(['🏆 世界冠軍', 10]);
       if (endingId === 'tech_boss') parts.push(['🏢 科技公司大老闆', 10]);
+      if (s.love && s.love.status === 'married') parts.push(['成家', 2]);
+      if (s.stats.money >= 100000000) parts.push(['富可敵國', 2]);
+      else if (s.stats.money >= 10000000) parts.push(['家財萬貫', 1]);
+      const GP = { S: 2, A: 1 };
+      if (GP[s.ending.grades.health]) parts.push([`健康評等 ${s.ending.grades.health}`, GP[s.ending.grades.health]]);
+      if (GP[s.ending.grades.mood]) parts.push([`幸福度 ${s.ending.grades.mood}`, GP[s.ending.grades.mood]]);
       if (!m.endings[endingId]) parts.push(['新結局解鎖', 2]);
       if (endingId === 'ordinary') parts.push(['參加獎', 1]);
       const total = parts.reduce((a, p) => a + p[1], 0);

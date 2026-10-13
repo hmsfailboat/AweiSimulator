@@ -88,9 +88,15 @@
       s.newAchievements = [];
     },
 
-    modal(html) {
-      this.modalEl.innerHTML = `<div class="modal-box">${html}</div>`;
+    modal(html, cls) {
+      this.modalEl.innerHTML = `<div class="modal-box ${cls || ''}">${html}</div>`;
       this.modalEl.classList.remove('hidden');
+    },
+    // 更新已開啟的視窗內容（不重播開啟動畫）
+    modalUpdate(html, cls) {
+      const box = this.modalEl.querySelector('.modal-box');
+      if (box && !this.modalEl.classList.contains('hidden')) box.innerHTML = html;
+      else this.modal(html, cls);
     },
     closeModal() { this.modalEl.classList.add('hidden'); this.modalEl.innerHTML = ''; },
     confirm(text, act, label) {
@@ -243,8 +249,33 @@
         ${this.rCareerBox(s)}
         <div class="group skills"><div class="g-title">能力</div>${skills.join('')}</div>
         <div class="group conds"><div class="g-title">狀態</div>${this.bar(s, 'health')}${this.bar(s, 'mood')}</div>
+        ${this.rStatus(s)}
+        ${this.rLoveBox(s)}
         <div class="money">💰 ${AW.fmtMoney(money)} ${money !== pm ? `<em class="${money > pm ? 'up' : 'down'}">${money > pm ? '+' : ''}${AW.fmtMoney(money - pm)}</em>` : ''}</div>
+        ${this.rShopBtns(s)}
         <div class="trait-tag" title="${esc(t.desc || '')}">${t.icon || ''} 天賦：${esc(t.name || '無')}</div>`;
+    },
+
+    rStatus(s) {
+      const list = AW.statusList(s);
+      if (!list.length) return '';
+      const bad = { tired: 1, frail: 1, low: 1, depressed: 1, chronic: 1 };
+      return `<div class="status-tags">${list.map((id) => `<span class="pill ${bad[id] ? 'bad' : 'ok'}" title="${esc(AW.tx('status', id + '_desc', s))}">${esc(AW.tx('status', id + '_name', s))}</span>`).join('')}</div>`;
+    },
+
+    rLoveBox(s) {
+      if (!AW.Love.active(s)) return '';
+      return `<div class="love-box"><div class="c-row"><span>💕 ${esc(s.love.name)}</span><span class="muted">${esc(AW.Love.statusName(s))}</span></div>${this.bar(s, 'love')}</div>`;
+    },
+
+    rShopBtns(s) {
+      const open = AW.Shop.open(s);
+      const cas = s.age >= AW.Casino.MIN_AGE && !s.flags.noGamble;
+      const charm = (s.items && s.items.charm) || 0;
+      return `<div class="shop-btns">
+        <button class="btn sm" data-act="item-shop" ${open ? '' : 'disabled'}>🛒 道具商店</button>
+        <button class="btn sm" data-act="casino" ${open && cas ? '' : 'disabled'} title="${cas ? '' : (s.flags.noGamble ? '已戒賭' : '18 歲解鎖')}">🎰 賭場</button>
+      </div>${charm ? `<div class="muted small">🍀 幸運御守 ×${charm}（下一次擲骰 +${Math.round(AW.CHARM_BONUS * 100)}%）</div>` : ''}`;
     },
 
     rCareerBox(s) {
@@ -313,6 +344,11 @@
       if (f.noGame) out.push('🚫 今年被禁止打電動');
       if (f.sick) out.push('🤒 病後休養：行動數 -1');
       if (f.burnout) out.push('🌫️ 倦怠中：行動數 -1');
+      if (f.busy) out.push('🏥 照顧家人：行動數 -1');
+      if (f.blue) out.push('🌧️ 憂鬱：行動數 -1');
+      if (f.lag) out.push('📶 網路陰影：賽季戰力 -4');
+      if (f.halfAllowance) out.push('🏚️ 家裡手頭緊：零用錢減半');
+      if (f.extraSlot) out.push('⏰ 今年行動數 +1');
       return out.length ? `<div class="flags">${out.map((x) => `<span class="pill warn">${x}</span>`).join('')}</div>` : '';
     },
 
@@ -324,21 +360,22 @@
       const r = s.eventResult;
       let actions;
       if (!r) {
+        const charm = (s.items && s.items.charm) > 0;
         if (e.choices && e.choices.length) {
           actions = `<div class="choices">${E.visibleChoices(s, e).map(({ c, i, ok }) =>
-            `<button class="btn choice" data-act="choice" data-i="${i}" ${ok ? '' : 'disabled'}>${esc(c.text)}${c.roll ? ' <small>🎲</small>' : ''}</button>`).join('')}</div>`;
+            `<button class="btn choice" data-act="choice" data-i="${i}" ${ok ? '' : 'disabled'}>${esc(AW.val(c.text, s))}${c.roll ? ` <small>🎲${charm ? '🍀' : ''}</small>` : ''}</button>`).join('')}</div>`;
         } else {
           actions = `<div class="choices"><button class="btn primary" data-act="choice" data-i="-1">好的</button></div>`;
         }
       } else {
-        const roll = r.roll ? `<div class="roll ${r.roll.ok ? 'ok' : 'bad'}">🎲 成功率 ${Math.round(r.roll.p * 100)}% → ${r.roll.ok ? '成功！' : '失敗……'}</div>` : '';
+        const roll = r.roll ? `<div class="roll ${r.roll.ok ? 'ok' : 'bad'}">🎲 成功率 ${Math.round(r.roll.p * 100)}%${r.roll.charm ? '（🍀 御守加成）' : ''} → ${r.roll.ok ? '成功！' : '失敗……'}</div>` : '';
         actions = `<div class="result">${roll}${r.text ? `<p>${esc(r.text)}</p>` : ''}<div class="chips-row">${this.chips(r.deltas) || '<span class="muted">（沒有數值變化）</span>'}</div></div>
           <div class="choices"><button class="btn primary" data-act="event-next">繼續 ▶</button></div>`;
       }
       return `<section class="card event pop">
         ${total > 1 ? `<div class="ev-count">今年還有 ${total - 1} 個事件</div>` : ''}
         <div class="ev-icon">${e.icon}</div>
-        <h3>${esc(e.title)}</h3>
+        <h3>${esc(AW.val(e.title, s))}</h3>
         <p class="ev-text">${nl(E.eventText(s, e))}</p>
         ${actions}
       </section>`;
@@ -354,7 +391,7 @@
         const sel = u.selected.includes(a.id);
         return `<button class="action-card ${sel ? 'selected' : ''} ${ok ? '' : 'disabled'}" data-act="toggle" data-id="${a.id}" ${ok ? '' : 'disabled'}>
           <div class="ac-head"><span class="ac-icon">${a.icon}</span><span class="ac-name">${esc(a.name)}</span>${sel ? '<span class="ac-check">✓</span>' : ''}</div>
-          <div class="ac-desc">${esc(a.desc || '')}</div>
+          <div class="ac-desc">${esc(AW.val(a.desc, s) || '')}</div>
           <div class="chips-row">${this.previewChips(s, a)}</div>
           ${ok ? '' : `<div class="ac-lock">🔒 ${esc(reason)}</div>`}
         </button>`;
@@ -467,6 +504,7 @@
         <div class="chips-row">${this.chips(diff) || '<span class="muted">平靜的一年。</span>'}</div>
         ${s.decision ? this.rDecision(s) : ''}
         <div class="row end">
+          ${E.canFire(s) ? `<button class="btn" data-act="fire">${esc(AW.tx('status', 'fire_button', s))}</button>` : ''}
           ${canRetire ? `<button class="btn ghost" data-act="retire">${s.phase === 'esports' ? '👋 宣布退役' : '🌅 提前退休'}</button>` : ''}
           <button class="btn primary big" data-act="next-year" ${s.decision ? 'disabled' : ''}>${end ? '🎬 迎接結局 ▶' : '迎接下一年 ▶'}</button>
         </div>
@@ -576,8 +614,10 @@
           <div class="end-icon">${end.icon}</div>
           <div class="end-label">結局</div>
           <h2>${esc(end.name)}</h2>
-          <p class="end-text">${esc(end.text(s))}</p>
+          <p class="end-text">${esc(AW.val(end.text, s))}</p>
           <div class="end-meta">${esc(s.displayName)} · ${s.age} 歲，故事告一段落</div>
+          ${s.ending.grades ? `<div class="end-grades"><span>❤️ 健康 <b class="g-${s.ending.grades.health}">${s.ending.grades.health}</b></span><span>😊 幸福度 <b class="g-${s.ending.grades.mood}">${s.ending.grades.mood}</b></span></div>` : ''}
+          ${AW.Love.endingLine(s) ? `<div class="end-meta">${esc(AW.Love.endingLine(s))}</div>` : ''}
           <div class="chips-row center">${stats}<span class="chip gold">💰${AW.fmtMoney(s.stats.money)}</span></div>
         </section>
         <section class="card">
@@ -621,6 +661,77 @@
         <section class="card"><h3>天賦解鎖</h3>${traits}</section>
         <div class="row end"><button class="btn" data-act="back">返回</button></div>
       </div>`;
+    },
+
+    // ======================= 道具商店 =======================
+    rItemShop() {
+      const s = this.S;
+      const list = AW.Shop.list(s);
+      const groupOf = (t) => (t === 'gear' || t === 'gift' ? t : 'use');
+      const groups = [
+        ['gear', '🧰 裝備', '永久持有，效果持續到結局'],
+        ['use', '🧃 消耗品', '買了立刻生效，每種每年限一次'],
+        ['gift', '🎁 禮物', `送給${s.love ? s.love.name : '另一半'}，每種每年限一次`],
+      ];
+      const html = groups.map(([g, title, hint]) => {
+        const rows = list.filter((x) => groupOf(x.it.type) === g).map(({ it, ok, owned, reason }) => `
+          <div class="shop-item ${owned ? 'owned' : ''}"><div class="si-icon">${it.icon}</div>
+            <div class="si-body"><b>${esc(it.name)}</b><div class="muted small">${esc(AW.Text.fill(it.desc, s))}</div>
+              ${!ok && !owned && reason ? `<div class="ac-lock">🔒 ${esc(reason)}</div>` : ''}</div>
+            ${owned ? '<span class="pill ok">已擁有</span>'
+              : `<button class="btn sm ${ok ? 'primary' : ''}" data-act="buy-item" data-id="${it.id}" ${ok ? '' : 'disabled'}>${AW.fmtMoney(AW.Shop.price(s, it))}</button>`}
+          </div>`).join('');
+        return rows ? `<h4 class="shop-h">${title} <small>${esc(hint)}</small></h4>${rows}` : '';
+      }).join('');
+      return `<h3>🛒 道具商店 <span class="pill gold">💰 ${AW.fmtMoney(s.stats.money)}</span></h3>${html}
+        <div class="row end"><button class="btn primary" data-act="close-modal">離開</button></div>`;
+    },
+
+    // ======================= 賭場 =======================
+    rCasino() {
+      const s = this.S;
+      const C = AW.Casino;
+      const c = this.cas;
+      const st = C.state(s);
+      const money = s.stats.money;
+      if (c.bet !== 'all' && c.bet > money) c.bet = C.BETS.filter((b) => b <= money).pop() || 1000;
+      const tabs = [['dice', '🎲 骰寶'], ['slots', '🎰 拉霸'], ['lottery', '🎟️ 彩券']].map(([g, n]) =>
+        `<button class="tab ${c.game === g ? 'on' : ''}" data-act="cas-game" data-g="${g}">${n}</button>`).join('');
+      const dis = st.ok ? '' : 'disabled';
+      const bets = c.game === 'lottery' ? '' : `<div class="bets">${C.BETS.filter((b) => b <= money).map((b) =>
+        `<button class="bet ${c.bet === b ? 'on' : ''}" data-act="cas-bet" data-b="${b}">${AW.fmtMoney(b)}</button>`).join('')}
+        ${money >= 1000 ? `<button class="bet all ${c.bet === 'all' ? 'on' : ''}" data-act="cas-bet" data-b="all">💥 梭哈</button>` : ''}</div>`;
+      let body;
+      if (c.game === 'dice') {
+        body = `<p class="muted small">三顆骰子，總和 11～17 為「大」、4～10 為「小」，猜中賠 1 倍。三顆相同（豹子）莊家通殺。</p>${bets}
+          <div class="choices"><button class="btn primary" data-act="cas-play" data-pick="big" ${dis}>押大</button>
+          <button class="btn primary" data-act="cas-play" data-pick="small" ${dis}>押小</button></div>`;
+      } else if (c.game === 'slots') {
+        body = `<p class="muted small">7️⃣7️⃣7️⃣ 拿回 30 倍、任意三個相同 8 倍、兩個相同 1.5 倍。</p>${bets}
+          <div class="choices"><button class="btn primary" data-act="cas-play" ${dis}>🎰 拉！</button></div>`;
+      } else {
+        const L = C.LOTTERY;
+        body = `<p class="muted small">每張 ${AW.fmtMoney(L.price)}。${L.prizes.map((p) => `${p.name} ${AW.fmtMoney(p.win)}`).join('、')}。</p>
+          <div class="choices"><button class="btn primary" data-act="cas-lotto" data-n="1" ${dis}>買 1 張</button>
+          <button class="btn primary" data-act="cas-lotto" data-n="10" ${dis || (money < L.price * 10 ? 'disabled' : '')}>買 10 張</button></div>`;
+      }
+      let last = '';
+      const r = c.last;
+      if (r) {
+        const show = r.dice ? `<div class="cas-show">${r.dice.map((d) => C.DICE[d - 1]).join('')}</div>`
+          : r.reels ? `<div class="cas-show">${r.reels.join('')}</div>` : '';
+        last = `<div class="cas-result ${r.net > 0 ? 'win' : r.net < 0 ? 'lose' : ''} pop">${show}
+          <div><b>${esc(r.text)}</b></div>
+          <div class="cas-net">${r.net > 0 ? `贏了 ${AW.fmtMoney(r.net)}！` : r.net < 0 ? `輸了 ${AW.fmtMoney(-r.net)}` : '不輸不贏'}</div></div>`;
+      }
+      return `<h3>🎰 賭場 <span class="pill gold">💰 ${AW.fmtMoney(money)}</span>
+          <span class="pill">今年剩 ${Math.max(0, C.MAX_PLAYS - C.plays(s))} 次</span></h3>
+        <div class="tabs">${tabs}</div>
+        ${body}
+        ${st.ok ? '' : `<p class="ac-lock center-text">🔒 ${esc(st.reason)}</p>`}
+        ${last}
+        <p class="muted small center-text">贏了心情變好，輸了心情變差；一次輸掉一半家產會很受打擊。</p>
+        <div class="row end"><button class="btn" data-act="close-modal">離開賭場</button></div>`;
     },
 
     // ======================= 圖鑑 =======================
@@ -671,14 +782,52 @@
             <li>🎂 <b>18 歲成年檢定</b>：遊戲能力（FPS 或 DOTA ≥ 60）與反應力（≥ 42）達標可參加戰隊試訓；學力 ≥ 50 可讀資工系。</li>
             <li>🎮 <b>電競職涯</b>：以「Aweiisa＿＿」之名出道，目標是<b>世界冠軍</b>。</li>
             <li>💻 <b>工程師職涯</b>：從初級工程師一路升遷或創業，目標是<b>科技公司大老闆</b>。</li>
-            <li>❤️ 健康或 😊 心情歸零會讓下一年行動數 -1；心情 ≥ 70 時成長 +10%。</li>
+            <li>❤️ <b>健康</b> ≥ 70 擲骰 +5%；低於 40 成長變慢、表現變差；長期過低會得慢性病；病倒 3 次這一局就結束了。</li>
+            <li>😊 <b>心情</b> ≥ 70 成長 +10%；低於 40 成長變慢、擲骰 -5%；太低可能陷入憂鬱。</li>
+            <li>🏁 結局會依一生的平均健康與心情評等，評等高可多拿傳承點。35～49 歲時存款 1 億、心情好，可以選擇「財富自由」提早退休。</li>
             <li>📈 能力越高越難練，FPS / DOTA 在 6～15 歲成長最快，反應力在 12 歲前成長最快。</li>
-            <li>🧬 每局結束獲得傳承點，可購買永久升級與天賦。</li>
+            <li>🛒 <b>道具商店</b>：用金錢買裝備（永久成長加成）、消耗品、額外行動數、幸運御守；有交往對象時還能買禮物。</li>
+            <li>🎰 <b>賭場</b>（18 歲起）：骰寶、拉霸、彩券，每年最多 10 次。十賭九輸，小賭怡情。</li>
+            <li>💕 <b>感情</b>：告白或邂逅成功後開始交往。不約會的話好感度每年下降，太低會分手；感情穩定可以求婚、結婚。</li>
+            <li>🧬 每局結束獲得傳承點，可購買永久升級與天賦。結婚、累積財富也能多拿傳承點。</li>
           </ul>
           <p class="muted small">進度每年自動存檔在瀏覽器中。</p>
           <div class="row end"><button class="btn primary" data-act="close-modal">了解！</button></div>`);
       },
       'close-modal'() { this.closeModal(); },
+
+      // 道具商店
+      'item-shop'() { if (AW.Shop.open(this.S)) this.modal(this.rItemShop(), 'wide'); },
+      'buy-item'(d) {
+        const r = AW.Shop.buy(this.S, d.id);
+        if (!r) return;
+        this.toast(`${r.it.icon} 購買「${esc(r.it.name)}」<div class="chips-row">${this.chips(r.deltas)}</div>`);
+        this.render();
+        this.modalUpdate(this.rItemShop(), 'wide');
+      },
+
+      // 賭場
+      casino() {
+        if (!AW.Shop.open(this.S)) return;
+        this.cas = { game: (this.cas && this.cas.game) || 'dice', bet: (this.cas && this.cas.bet) || 10000, last: null };
+        this.modal(this.rCasino(), 'wide');
+      },
+      'cas-game'(d) { this.cas.game = d.g; this.cas.last = null; this.modalUpdate(this.rCasino()); },
+      'cas-bet'(d) { this.cas.bet = d.b === 'all' ? 'all' : Number(d.b); this.modalUpdate(this.rCasino()); },
+      'cas-play'(d) {
+        const r = AW.Casino.play(this.S, this.cas.game, this.cas.bet, d.pick);
+        if (!r) return;
+        this.cas.last = r;
+        this.render();
+        this.modalUpdate(this.rCasino());
+      },
+      'cas-lotto'(d) {
+        const r = AW.Casino.lottery(this.S, Number(d.n));
+        if (!r) return;
+        this.cas.last = r;
+        this.render();
+        this.modalUpdate(this.rCasino());
+      },
       menu() {
         this.modal(`<h3>☰ 選單</h3><div class="menu-col">
           <button class="btn" data-act="help">❓ 遊戲說明</button>
@@ -756,6 +905,12 @@
       decide(d) { E.resolveDecision(this.S, Number(d.i)); this.afterEngine(); },
       retire() {
         this.confirm(this.S.phase === 'esports' ? '確定要宣布退役嗎？這一局將會結束。' : '確定要提前退休嗎？這一局將會結束。', 'retire-confirm', '確定');
+      },
+      fire() { this.confirm(AW.tx('status', 'fire_confirm', this.S), 'fire-confirm', '提早退休'); },
+      'fire-confirm'() {
+        this.closeModal();
+        if (E.canFire(this.S)) E.finish(this.S, 'fire');
+        this.afterEngine();
       },
       'retire-confirm'() {
         this.closeModal();
