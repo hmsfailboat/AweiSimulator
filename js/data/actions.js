@@ -3,7 +3,7 @@
  *         pro(電競) uni(大學) job(上班) startup(創業)
  * tags: game → 被「禁止打電動」時不可選；hideLocked: 條件不符時直接隱藏（不顯示鎖頭）
  * perf: 工程師年度績效加成；sp: 創業衝刺點數
- * cost: 金錢花費（數字或 (s) => 數字）
+ * cost: 金錢花費（數字或 (s) => 數字）；income: 職涯收入（會計入所得稅）
  * run(s): 特殊效果，回傳 { text, deltas }
  * 名稱、說明等文字在 js/data/texts.js 的 [action.代號]
  */
@@ -90,16 +90,16 @@
       effects: { teamwork: 8, main: 2, mood: -1 } },
     { id: 'review_vod', stages: ['pro'],
       effects: { main: 4, teamwork: 4, mood: -2 } },
-    { id: 'stream', stages: ['pro'],
-      effects: (s) => ({ fame: 6, money: 30000 + s.stats.fame * 3000, mood: 3, main: 1 }) },
+    { id: 'stream', stages: ['pro'], income: (s) => 30000 + s.stats.fame * 3000,
+      effects: { fame: 6, mood: 3, main: 1 } },
     { id: 'gym', stages: ['pro', 'job', 'startup'],
       effects: { health: 12, mood: 2 },
       run(s) { s.yearFlags.gym = 1; return { text: AW.tx('action.gym', 'msg', s), deltas: {} }; } },
     { id: 'pro_rest', stages: ['pro'],
       effects: { health: 10, mood: 15 } },
     { id: 'endorse', stages: ['pro'],
-      cond: (s) => s.stats.fame >= 40,
-      effects: (s) => ({ money: s.stats.fame * 15000, fame: 3, mood: -2, main: -1 }) },
+      cond: (s) => s.stats.fame >= 40, income: (s) => s.stats.fame * 15000,
+      effects: { fame: 3, mood: -2, main: -1 } },
 
     // ---------------- 大學 ----------------
     { id: 'uni_study', stages: ['uni'],
@@ -141,19 +141,17 @@
         }
         return { text: '', deltas: {} };
       } },
-    { id: 'invest', stages: ['pro', 'job'],
-      cond: (s) => s.stats.money >= 100000,
-      run(s) {
-        const base = Math.min(s.stats.money * 0.3, 5000000);
-        const r = AW.rand() * 0.6 - 0.2; // -20% ~ +40%
-        const d = AW.applyEffects(s, { money: Math.round(base * r), mood: r > 0 ? 4 : -4 });
-        return { text: AW.tx('action.invest', r > 0 ? 'msg_win' : 'msg_lose', s), deltas: d };
-      } },
     { id: 'vacation', stages: ['job', 'startup'], cost: 50000,
       effects: { health: 14, mood: 15 } },
     { id: 'quit_startup', stages: ['job'],
       cond: (s) => s.eng.rank >= 2 && s.stats.money >= 3000000 && (s.flags.founded || 0) < 2,
       run(s) { return AW.Engineer.startStartup(s); } },
+
+    // ---------------- 朋友（認識開黑朋友後） ----------------
+    { id: 'squad', stages: ['elem', 'junior', 'senior', 'extra', 'pro', 'uni', 'job', 'startup'], tags: ['game'],
+      cond: (s) => AW.NPC.gamers(s).length > 0, hideLocked: true,
+      effects: { mood: 8, best: 2, social: 2, health: -2 },
+      run(s) { return { text: '', deltas: {}, bonds: AW.NPC.squad(s) }; } },
 
     // ---------------- 感情（有交往對象時） ----------------
     { id: 'date', stages: LOVE, cond: (s) => AW.Love.active(s), hideLocked: true,

@@ -15,15 +15,18 @@
 | `css/style.css` | 樣式 |
 | `js/core.js` | 隨機數、數值定義、效果套用 |
 | `js/data/texts.js` | **所有遊戲文字**（事件、選項、行動、成就、結局、天賦、道具） |
-| `js/data/` | 天賦、行動、隨機事件、道具、結局／成就的數值與條件 |
+| `js/data/` | 天賦、行動、隨機事件、道具、朋友 NPC、結局／成就的數值與條件 |
 | `js/text.js` | 文本解析，把 texts.js 的文字填進資料 |
 | `js/engine.js` | 年度流程、成年檢定、存讀檔、傳承 |
-| `js/esports.js` / `js/engineer.js` | 兩條職涯 |
+| `js/esports.js` / `js/engineer.js` | 兩條職涯（電競含宿敵王選手） |
+| `js/office.js` | 工程師的職場聯賽：季度專案、同期排行、升遷答辯、董事會投票、創業募資 |
+| `js/finance.js` | 所得稅、生活水準、投資、貸款、負債與破產 |
+| `js/npcs.js` | 朋友：認識、好友度、雇用 |
 | `js/love.js` | 感情：交往、求婚、結婚、分手 |
 | `js/shop.js` | 道具商店、賭場 |
 | `js/ui.js` | 畫面 |
 | `tools/sim.js` | 平衡模擬：`node tools/sim.js 1000`；`node tools/sim.js --meta` 統計幾局能全部解鎖傳承商店 |
-| `docs/PLAN.md` | 實作企劃 |
+| `docs/PLAN.md` / `docs/PLAN-v2.md` | 實作企劃（v1.0／v1.2 之後） |
 
 ## 修改遊戲文字
 所有事件、選項、成就等文字都集中在 [`js/data/texts.js`](js/data/texts.js)，用簡單的「欄位 = 內容」格式撰寫，改完存檔、重新整理網頁就會生效。檔案開頭有完整的格式說明。

@@ -1,4 +1,4 @@
-/* 工程師職涯：大學、求職、考績升遷、創業 */
+/* 工程師職涯：大學、求職、升遷、創業（每年的職場賽季在 office.js） */
 (function (root) {
   'use strict';
   const AW = root.AW;
@@ -21,9 +21,9 @@
     { name: '技術主管', salary: 2000000, req: { tech: 65, leader: 45 } },
     { name: '部門總監', salary: 3200000, req: { leader: 60, social: 50 } },
     { name: '副總裁', salary: 5000000, req: { leader: 72, social: 62 } },
-    { name: '執行長', salary: 10000000, req: { leader: 80, social: 70 } },
+    { name: '執行長', salary: 10000000, req: { leader: 78, social: 70 } },
   ];
-  const PROMO_NEED = [2, 3, 4, 6, 8, 10];
+  const PROMO_NEED = [2, 3, 4, 6, 8, 8];
   const STARTUP = [
     { name: '車庫創業', icon: '🚗', bonus: 0 },
     { name: '種子輪', icon: '🌱', bonus: 500000 },
@@ -31,10 +31,6 @@
     { name: 'B 輪', icon: '🅱️', bonus: 3000000 },
     { name: 'C 輪', icon: '📊', bonus: 6000000 },
     { name: 'IPO 上市', icon: '🔔', bonus: 50000000 },
-  ];
-  const GRADES = [
-    { g: 'S', min: 75, pts: 3 }, { g: 'A', min: 60, pts: 2 }, { g: 'B', min: 45, pts: 1 },
-    { g: 'C', min: 30, pts: 0 }, { g: 'D', min: -999, pts: -1 },
   ];
 
   const Engineer = (AW.Engineer = {
@@ -82,6 +78,7 @@
             st.eng.companyName = name;
             st.eng.rank = 0;
             st.eng.promo = 0;
+            AW.Office.makePeers(st);
             return { text: `畢業了！加入 ${name} 成為初級工程師。` };
           },
         };
@@ -96,6 +93,7 @@
         e.company += 1;
         e.companyName = AW.pick(COMPANY_NAMES[e.company]);
         e.promo = 0;
+        AW.Office.makePeers(s);
         AW.applyEffects(s, { mood: 6, money: Math.round(this.salary(s) * 0.15) });
         return { text: `跳槽到 ${e.companyName}（${COMPANY[e.company].name}），簽約金入袋！升遷點數重新累計。` };
       }
@@ -103,45 +101,6 @@
       e.promo += 1;
       AW.applyEffects(s, { mood: 6, money: Math.round(this.salary(s) * 0.2) });
       return { text: `跳槽到 ${e.companyName}，薪水大漲，升遷點數 +1。` };
-    },
-
-    review(s) {
-      const e = s.eng;
-      const st = s.stats;
-      const rel = e.rank <= 2 ? st.tech
-        : e.rank === 3 ? (st.tech + st.leader) / 2
-        : st.leader * 0.5 + st.social * 0.3 + st.tech * 0.2;
-      const steady = AW.traitOf(s).clutch ? 0.6 : 1;
-      const score = rel - e.rank * 6 + s.yearPerf * 4 + (st.mood - 50) / 5 + AW.randInt(-12, 12) * steady
-        - (st.health < AW.TIER.low ? 4 : 0);
-      const grade = GRADES.find((g) => score >= g.min);
-      e.promo = Math.max(0, e.promo + grade.pts);
-      e.lastGrade = grade.g;
-      const need = this.promoNeed(s);
-      const miss = this.missingReq(s, e.rank + 1);
-      let promoted = false;
-      let board = null;
-      if (e.rank === 5 && e.promo >= need && !miss.length) {
-        // 執行長由董事會投票
-        board = AW.chance(0.5);
-        if (!board) {
-          e.promo = Math.floor(e.promo / 2);
-          AW.Engine.note(s, '🗳️', '董事會這次選擇了外部空降的執行長……再接再厲。');
-        }
-      }
-      if (e.rank < 6 && e.promo >= need && !miss.length && board !== false) {
-        e.rank += 1;
-        e.promo = 0;
-        e.bestRank = Math.max(e.bestRank, e.rank);
-        s.milestones.promotions += 1;
-        promoted = true;
-        AW.applyEffects(s, { mood: 10 });
-        if (e.rank === 6) s.pendingEnding = 'tech_boss';
-      }
-      const r = { grade: grade.g, score: Math.round(score), pts: grade.pts, promo: e.promo, need: this.promoNeed(s), promoted, board,
-        rank: e.rank, miss: promoted ? this.missingReq(s, e.rank + 1) : miss };
-      AW.Engine.note(s, promoted ? '🎉' : '📋', `年度考績 ${grade.g}${promoted ? `，升任「${this.rankName(s)}」！` : ''}`);
-      return r;
     },
 
     startStartup(s) {
@@ -155,45 +114,25 @@
       return { text: `成立「${e.startupName}」！投入 300 萬資金。`, deltas: { money: -3000000 } };
     },
 
-    startupYear(s) {
+    // 創業倒閉：回到職場，職級 -1
+    closeStartup(s) {
       const e = s.eng;
-      const st = s.stats;
-      const score = 0.4 * st.tech + 0.35 * st.leader + 0.25 * st.social + s.yearSp * 3 + (s.flags.startupIdea ? 8 : 0)
-        + AW.randInt(-15, 15) - e.startup * 7 - (st.health < AW.TIER.low ? 4 : 0);
-      let result;
-      if (score >= 58) {
-        e.startup += 1;
-        e.runway = 3;
-        const st2 = STARTUP[e.startup];
-        AW.applyEffects(s, { money: st2.bonus, mood: 10, fame: 4 });
-        result = 'up';
-        AW.Engine.note(s, st2.icon, `${e.startupName} 成功進入「${st2.name}」！`);
-        if (e.startup >= 5) s.pendingEnding = 'tech_boss';
-      } else {
-        e.runway -= score >= 38 ? 1 : 2;
-        result = score >= 38 ? 'hold' : 'bad';
-        AW.applyEffects(s, { mood: result === 'bad' ? -10 : -3 });
-        if (e.runway <= 0) {
-          result = 'bankrupt';
-          s.flags.bankrupt = (s.flags.bankrupt || 0) + 1;
-          e.stage = 'job';
-          e.rank = Math.max(1, e.rank - 1);
-          e.company = AW.randInt(0, 1);
-          e.companyName = AW.pick(COMPANY_NAMES[e.company]);
-          e.promo = 0;
-          AW.applyEffects(s, { mood: -20 });
-          AW.Engine.note(s, '💥', `${e.startupName} 資金燒光，宣告倒閉……回到職場，加入 ${e.companyName} 擔任${this.rankName(s)}。`);
-        } else {
-          AW.Engine.note(s, result === 'hold' ? '😐' : '📉', `${e.startupName} 今年${result === 'hold' ? '進展有限' : '遭遇挫折'}，資金跑道剩 ${e.runway} 年。`);
-        }
-      }
-      return { startup: true, score: Math.round(score), result, stage: e.startup, runway: e.runway };
+      s.flags.bankrupt = (s.flags.bankrupt || 0) + 1;
+      e.stage = 'job';
+      e.rank = Math.max(1, e.rank - 1);
+      e.company = AW.randInt(0, 1);
+      e.companyName = AW.pick(COMPANY_NAMES[e.company]);
+      e.promo = 0;
+      AW.Office.makePeers(s);
+      AW.applyEffects(s, { mood: -20 });
+      AW.Engine.note(s, '💥', `${e.startupName} 資金燒光，宣告倒閉……回到職場，加入 ${e.companyName} 擔任${this.rankName(s)}。`);
     },
 
     yearEnd(s) {
       const e = s.eng;
-      if (e.stage === 'job') AW.applyEffects(s, { money: this.salary(s) });
-      if (e.stage === 'startup') AW.applyEffects(s, { money: 300000 });
+      AW.Office.settle(s);
+      if (e.stage === 'job') AW.Finance.earn(s, this.salary(s));
+      if (e.stage === 'startup') AW.Finance.earn(s, 300000);
       if (!s.pendingEnding && s.age >= 55) {
         s.pendingEnding = this.endingFor(s);
         AW.Engine.note(s, '🌅', '55 歲，光榮退休。');

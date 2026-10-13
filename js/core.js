@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const AW = (root.AW = root.AW || {});
-  AW.VERSION = '1.1'; // 發布新版時同步更新 CHANGELOG.md
+  AW.VERSION = '1.2'; // 發布新版時同步更新 CHANGELOG.md
 
   // ---------- 隨機數（mulberry32，可存檔重現） ----------
   AW.rng = {
@@ -115,6 +115,13 @@
     return out;
   };
 
+  // 健康／心情：恢復遞減（距離上限 RECOVER_SPAN 以內，恢復量按比例打折）、消耗減免上限
+  AW.RECOVER_KEYS = ['health', 'mood'];
+  AW.RECOVER_SPAN = 50;
+  AW.DRAIN_CAP = 0.5;
+  // 健康上限：35 歲後每 2 歲 -1
+  AW.condMax = (s, key) => (key === 'health' ? 100 - Math.max(0, Math.floor((s.age - 35) / 2)) : 100);
+
   AW.DIM = { cap: 120, pow: 1.8 };
   AW.diminish = (v) => Math.pow(Math.max(0.02, 1 - v / AW.DIM.cap), AW.DIM.pow);
   // 隨機進位：保留期望值，又能讓高數值時偶爾 +1
@@ -140,12 +147,18 @@
       if (def.kind === 'res') {
         s.stats[key] = Math.round(cur + v);
       } else if (def.kind === 'cond') {
+        const cap = AW.condMax(s, key);
         if (v < 0) {
           const drain = ((trait.drain && trait.drain[key]) || 0) + (AW.Shop ? AW.Shop.bonus(s, 'drain', key) : 0);
-          if (drain) v *= 1 - Math.min(drain, 0.7);
+          if (drain) v *= 1 - Math.min(drain, AW.DRAIN_CAP);
+          v = Math.round(v);
+        } else if (AW.RECOVER_KEYS.includes(key)) {
+          // 恢復遞減：越接近上限越難補滿
+          v = AW.sround(v * AW.clamp((cap - cur) / AW.RECOVER_SPAN, 0, 1));
+        } else {
+          v = Math.round(v);
         }
-        v = Math.round(v);
-        s.stats[key] = AW.clamp(cur + v, 0, 100);
+        s.stats[key] = AW.clamp(cur + v, 0, Math.max(cap, cur));
       } else {
         if (v > 0 && grow) {
           v = AW.sround(v * AW.growthMult(s, key) * AW.diminish(cur));
@@ -158,6 +171,25 @@
       if (d) out[key] = (out[key] || 0) + d;
     }
     return out;
+  };
+
+  // 一場系列賽：單局勝率 p、BO 幾；回傳 { games, w, l, won }
+  AW.playSeries = (p, bo) => {
+    const need = Math.ceil(bo / 2);
+    const games = [];
+    let w = 0, l = 0;
+    while (w < need && l < need) {
+      const g = AW.chance(p);
+      games.push(g);
+      if (g) w++; else l++;
+    }
+    return { p, bo, games, w, l, won: w >= need };
+  };
+  AW.logistic = (d, k) => 1 / (1 + Math.exp(-d / k));
+  // 常態分布亂數（Box-Muller）
+  AW.randNormal = () => {
+    const u = Math.max(1e-9, AW.rand());
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * AW.rand());
   };
 
   AW.mergeDeltas = (a, b) => {

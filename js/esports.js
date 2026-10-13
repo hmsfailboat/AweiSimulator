@@ -24,9 +24,11 @@
 
   const LEAGUES = {
     minor: { name: '次級聯賽', league: 46, playoffs: [52, 56, 60], fameMult: 0.5 },
-    major: { name: '職業聯賽', league: 66, playoffs: [70, 74, 78], fameMult: 1 },
+    major: { name: '職業聯賽', league: 66, playoffs: [69, 73, 77], fameMult: 1 },
   };
-  const WORLDS = { groups: [74, 76, 78], ko: [{ name: '八強賽', opp: 80, bo: 3 }, { name: '四強賽', opp: 83, bo: 5 }, { name: '總決賽', opp: 85, bo: 5 }] };
+  // 宿敵王選手：能力成長、戰隊等級門檻、季後賽遇到的機率
+  const RIVAL = { growUntil: 26, declineFrom: 29, tierSkill: [58, 68, 78, 85], meetPlayoff: 0.6, slayFinals: 1, friendsH2H: 8 };
+  const WORLDS = { groups: [73, 75, 77], ko: [{ name: '八強賽', opp: 78, bo: 3 }, { name: '四強賽', opp: 81, bo: 5 }, { name: '總決賽', opp: 83, bo: 5 }] };
 
   const Esports = (AW.Esports = {
     TIERS,
@@ -41,6 +43,44 @@
       s.esports = { game, tier, team: this.teamName(tier), seasons: 0, domesticTitles: 0, minorTitles: 0,
         worldTitles: 0, bestWorlds: 0, history: [], maxTier: tier };
       s.stats.teamwork = Math.max(s.stats.teamwork, Math.round(s.stats.social * 0.5));
+      s.fin.style = 0; // 新秀薪水低，先過小資生活
+      this.startRival(s);
+    },
+
+    // ---------- 宿敵：王選手 ----------
+    // 阿維出道同年，王選手也出道，主項目跟阿維相同（阿維選 DOTA，他也轉 DOTA）
+    startRival(s) {
+      const e = s.esports;
+      const skill = AW.clamp(s.stats[e.game] + AW.randInt(-6, 4), 50, 95);
+      const tier = AW.clamp(e.tier + AW.randInt(0, 1), 0, 4);
+      s.rival = { skill, tier, team: this.teamName(tier, e.team), w: 0, l: 0, game: e.game };
+      const text = AW.NPC.met(s, 'wang') ? '' : AW.NPC.meet(s, 'wang', 'intro_pro');
+      AW.Engine.addLog(s, '🔥', (text ? text + ' ' : '') + AW.tx('rival', e.game === 'dota' ? 'debut_dota' : 'debut', s, this.rivalVars(s)));
+    },
+    rivalVars(s) {
+      const r = s.rival;
+      return r ? { 宿敵戰隊: r.team, 宿敵戰績: `${r.w} 勝 ${r.l} 敗` } : {};
+    },
+    rivalTeamPower(s) {
+      const r = s.rival;
+      return 0.45 * (0.8 * r.skill + 10) + 0.55 * TIERS[r.tier].mates;
+    },
+    rivalName(s) { return `${s.rival.team}（${AW.NPC.name('wang')}）`; },
+    rivalYear(s) {
+      const r = s.rival;
+      if (!r) return;
+      if (s.age < RIVAL.growUntil) r.skill += AW.sround(AW.randInt(1, 4) * AW.diminish(r.skill));
+      else if (s.age >= RIVAL.declineFrom) r.skill -= AW.randInt(1, 2);
+      r.skill = AW.clamp(r.skill, 40, 99);
+      const target = RIVAL.tierSkill.filter((v) => r.skill >= v).length;
+      const nt = r.tier + Math.sign(target - r.tier);
+      if (nt !== r.tier && (nt < r.tier || AW.chance(0.6))) {
+        r.tier = nt;
+        r.team = this.teamName(nt, s.esports.team);
+        AW.Engine.note(s, '🔥', AW.tx('rival', 'transfer', s, this.rivalVars(s)));
+      } else if (r.team === s.esports.team) {
+        r.team = this.teamName(r.tier, s.esports.team);
+      }
     },
 
     mainStat(s) { return s.stats[s.esports.game]; },
@@ -71,12 +111,20 @@
       const lg = LEAGUES[tier.league];
       const T = this.teamPower(s);
       const clutch = AW.traitOf(s).clutch || 0;
-      const season = { T: Math.round(T), league: tier.league, stages: [], leagueWins: 0, summary: [], worldsReach: 0,
+      const season = { kind: 'esports', title: AW.tx('rival', 'season_title', s), pill: `隊伍戰力 ${Math.round(T)}`,
+        T: Math.round(T), league: tier.league, stages: [], leagueWins: 0, summary: [], worldsReach: 0,
         playoffWins: 0, champion: false, finalist: false };
 
       // 聯賽
       const opps = AW.shuffle(DOMESTIC_OPP).slice(0, 7);
       const lgMatches = opps.map((n) => this.series(T, lg.league + AW.randInt(-7, 7), 1, 0, n));
+      // 宿敵在同一級聯賽：例行賽一定會碰到，季後賽也可能碰頭
+      const rival = s.rival && TIERS[s.rival.tier].league === tier.league && s.rival.team !== e.team ? s.rival : null;
+      const R = rival ? this.rivalTeamPower(s) : 0;
+      if (rival) {
+        const i = AW.randInt(0, 6);
+        lgMatches[i] = Object.assign(this.series(T, Math.round(R), 1, 0, this.rivalName(s)), { rival: true });
+      }
       season.leagueWins = lgMatches.filter((m) => m.won).length;
       const lgPass = season.leagueWins >= 4;
       season.stages.push({ name: `${lg.name}・例行賽`, icon: '📅', matches: lgMatches, passed: lgPass,
@@ -89,8 +137,13 @@
       const poMatches = [];
       const roundNames = ['八強', '四強', '決賽'];
       let alive = true;
+      // 宿敵實力越強，越晚碰頭
+      const rivalRound = !rival || !AW.chance(RIVAL.meetPlayoff) ? -1 : R >= lg.playoffs[2] - 2 ? 2 : R >= lg.playoffs[1] - 2 ? 1 : 0;
       for (let i = 0; i < 3 && alive; i++) {
-        const m = this.series(T, lg.playoffs[i], i === 2 ? 5 : 3, clutch, poOpps[i]);
+        const isRival = i === rivalRound;
+        const opp = isRival ? Math.max(Math.round(R), lg.playoffs[i] - 4) : lg.playoffs[i];
+        const m = this.series(T, opp, i === 2 ? 5 : 3, clutch, isRival ? this.rivalName(s) : poOpps[i]);
+        if (isRival) m.rival = true;
         m.round = roundNames[i];
         poMatches.push(m);
         if (m.won) season.playoffWins++;
@@ -148,7 +201,9 @@
       }
       if (season.worldChampion) { e.worldTitles += 1; fame += 25; }
       if (!season.leagueWins) fame -= 3;
-      AW.applyEffects(s, { fame: Math.round(fame), money: prize + tier.salary });
+      AW.applyEffects(s, { fame: Math.round(fame) });
+      AW.Finance.earn(s, prize + tier.salary);
+      this.rivalResults(s, season);
       if (season.leagueWins <= 2) AW.applyEffects(s, { mood: -6 });
       if (season.champion) AW.applyEffects(s, { mood: 12, teamwork: 3 });
       e.history.push({ age: s.age, team: e.team, tier: e.tier, summary: season.summary.join(' → ') });
@@ -165,6 +220,21 @@
         return;
       }
       this.offseason(s, season);
+    },
+
+    // 記錄與宿敵的對戰成績
+    rivalResults(s, season) {
+      const r = s.rival;
+      if (!r) return;
+      for (const st of season.stages) for (const m of st.matches) {
+        if (!m.rival) continue;
+        if (m.won) r.w += 1; else r.l += 1;
+        if (m.round === '決賽') {
+          if (m.won) { s.flags.rivalSlayer = 1; AW.Engine.note(s, '🔥', AW.tx('rival', 'final_win', s, this.rivalVars(s))); }
+          else AW.Engine.note(s, '💢', AW.tx('rival', 'final_lose', s, this.rivalVars(s)));
+        }
+      }
+      this.rivalYear(s);
     },
 
     aging(s) {

@@ -1,6 +1,7 @@
 /* 無頭平衡模擬：node tools/sim.js [局數]
  * 以數種策略自動遊玩，輸出成年檢定與職涯結果分佈。
  * node tools/sim.js --meta [輪數]：從零開始連續重生，有傳承點就買，統計幾局能全部解鎖。
+ * SIM_HOOK=除錯腳本.js node tools/sim.js：載入除錯腳本，可替換或監看任何函式。
  */
 'use strict';
 const fs = require('fs');
@@ -9,7 +10,8 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const FILES = ['js/core.js', 'js/text.js', 'js/data/texts.js', 'js/data/traits.js', 'js/data/actions.js', 'js/data/events.js',
-  'js/data/items.js', 'js/data/meta.js', 'js/engine.js', 'js/love.js', 'js/shop.js', 'js/esports.js', 'js/engineer.js'];
+  'js/data/items.js', 'js/data/npcs.js', 'js/data/meta.js', 'js/engine.js', 'js/love.js', 'js/shop.js', 'js/finance.js',
+  'js/npcs.js', 'js/office.js', 'js/esports.js', 'js/engineer.js'];
 const ctx = { console, Math, Date, JSON };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
@@ -19,7 +21,16 @@ if (AW.Text.missing.length || AW.Text.warnings.length) {
   console.log('⚠️ 文本問題：\n' + AW.Text.missing.concat(AW.Text.warnings).join('\n'));
   process.exitCode = 1;
 }
+// 遊玩中才取用的文本（AW.tx），缺少的話在最後列出
+const missingAtLoad = AW.Text.missing.length;
+process.on('exit', () => {
+  const miss = [...new Set(AW.Text.missing.slice(missingAtLoad))];
+  if (miss.length) { console.log('\n⚠️ 遊玩中缺少的文本：\n' + miss.join('\n')); process.exitCode = 1; }
+});
 const E = AW.Engine;
+// 除錯用：SIM_HOOK=檔案路徑，該檔案匯出 (AW) => { 結束時要執行的函式 }
+const hookDone = process.env.SIM_HOOK ? require(path.resolve(process.env.SIM_HOOK))(AW) : null;
+if (hookDone) process.on('exit', hookDone);
 AW.Meta.data = AW.Meta.defaults();
 AW.Meta.save = () => {};
 
@@ -33,7 +44,7 @@ function pickActions(s, prefs, grind) {
   const out = [];
   const st = s.stats;
   const need = [];
-  if (!grind && st.health < 35) need.push('rest', 'pro_rest', 'uni_rest', 'vacation', 'gym', 'sports');
+  if (!grind && st.health < 45) need.push('rest', 'pro_rest', 'uni_rest', 'vacation', 'gym', 'sports');
   if (!grind && st.mood < 50) need.push('rest', 'pro_rest', 'uni_game', 'vacation', 'friends');
   if (AW.Love.active(s) && st.love < 50) need.push('date');
   for (const id of need.concat(prefs(s))) {
@@ -70,7 +81,28 @@ const STRATS = {
     wantPro: true,
   },
   random: { trait: 'sunny', alloc: { fps: 2, dota: 2, reflex: 2, study: 2, social: 2 }, student: () => [], wantPro: true },
+  // 有錢就花：每年買消耗品、買得起就買裝備、升級生活水準、一半存款買 ETF
+  shopper: {
+    trait: 'scholar', alloc: { study: 5, social: 5 }, shop: true,
+    student: (s) => s.age < 6 ? ['story', 'blocks'] : ['class', 'exam_prep', 'cram', 'friends', 'squad'],
+    wantPro: false,
+  },
 };
+
+// 道具與理財：shopper 策略在每年的事件、結算時呼叫
+function shopAll(s) {
+  for (const { it, ok } of AW.Shop.list(s)) {
+    if (!ok || it.type === 'charm' || it.type === 'gift') continue;
+    const p = AW.Shop.cost(s, it);
+    if (it.type === 'gear' ? s.stats.money >= p * 3 : s.stats.money >= p * 5) AW.Shop.buy(s, it.id);
+  }
+  const F = AW.Finance;
+  if (F.canManage(s) && F.active(s)) {
+    const want = F.STYLES.map((x, i) => i).filter((i) => s.stats.money >= F.STYLES[i].cost * 20).pop();
+    if (want != null && want > s.fin.style) F.setStyle(s, want);
+    if (s.stats.money > 2000000) F.invest(s, 'etf', Math.round(s.stats.money * 0.5));
+  }
+}
 
 const proPrefs = (s) => {
   const st = s.stats;
@@ -96,9 +128,11 @@ function playRun(strat, opts) {
   const st = STRATS[strat];
   const s = E.newRun({ trait: st.trait, alloc: st.alloc, seed: (R() * 4294967295) >>> 0 });
   s.useStartup = opts.startup;
-  const res = { strat };
+  s.simStrat = strat;
+  const res = { strat, grades: {}, rankAge: {} };
   let guard = 0;
   while (s.phase !== 'ended' && guard++ < 500) {
+    if (st.shop && (s.step === 'event' || s.step === 'action')) shopAll(s);
     if (s.step === 'event') {
       const e = E.currentEvent(s);
       const ch = E.visibleChoices(s, e).filter((x) => x.ok);
@@ -111,6 +145,8 @@ function playRun(strat, opts) {
       E.seasonDone(s);
     } else if (s.step === 'summary') {
       if (E.canFire(s)) res.fire = 1;
+      if (s.review && s.review.grade) res.grades[s.review.grade] = (res.grades[s.review.grade] || 0) + 1;
+      if (s.eng && s.eng.rank && res.rankAge[s.eng.rank] == null) res.rankAge[s.eng.rank] = s.age;
       if (s.decision) E.resolveDecision(s, 0);
       else E.nextYear(s);
     } else if (s.step === 'decision') {
@@ -142,6 +178,11 @@ function playRun(strat, opts) {
   res.chronic = s.flags.chronic ? 1 : 0;
   res.married = s.love && s.love.status === 'married' ? 1 : 0;
   res.brokeUp = s.flags.brokeUp ? 1 : 0;
+  res.money = s.stats.money;
+  res.tax = s.fin.taxTotal;
+  res.debt = s.flags.debt ? 1 : 0;
+  res.npcs = Object.keys(s.npcs).length;
+  if (s.rival) res.h2h = s.rival.w + s.rival.l;
   return res;
 }
 
@@ -222,11 +263,23 @@ for (const strat of Object.keys(STRATS)) {
     console.log(`職業門檻 ${pct(by((r) => r.proOk), N)}  升學門檻 ${pct(by((r) => r.studyOk), N)}  雙失敗 ${pct(by((r) => !r.proOk && !r.studyOk), N)}`);
     console.log(`路線：電競 ${pct(es.length, N)} 工程師 ${pct(en.length, N)} 平凡 ${pct(by((r) => r.path === 'ordinary'), N)}`);
     if (es.length) console.log(`  電競：世界冠軍 ${pct(es.filter((r) => r.ending === 'world_champ').length, es.length)}  曾進世界賽 ${pct(es.filter((r) => r.bestWorlds > 0).length, es.length)}  國內冠軍 ${pct(es.filter((r) => r.dom > 0).length, es.length)}  最高Tier ${avg(es, 'tier')}  結束年齡 ${avg(es, 'age')}`);
+    if (en.length) {
+      const g = {};
+      for (const r of en) for (const k of Object.keys(r.grades)) g[k] = (g[k] || 0) + r.grades[k];
+      const gt = Object.values(g).reduce((a, b) => a + b, 0);
+      const ages = [1, 2, 3, 4, 5, 6].map((k) => {
+        const v = en.filter((r) => r.rankAge[k] != null);
+        return `${k}:${v.length ? (v.reduce((a, r) => a + r.rankAge[k], 0) / v.length).toFixed(0) : '-'}歲(${pct(v.length, en.length)})`;
+      }).join(' ');
+      console.log(`  考績 ${['S', 'A', 'B', 'C', 'D'].map((k) => k + ':' + pct(g[k] || 0, gt)).join(' ')}｜升到各職級的平均年齡 ${ages}`);
+    }
     if (en.length) console.log(`  工程：大老闆 ${pct(en.filter((r) => r.ending === 'tech_boss').length, en.length)}  最高職級 ${avg(en, 'rank')}  倒閉 ${pct(en.filter((r) => r.bankrupt).length, en.length)}  結束年齡 ${avg(en, 'age')}`);
     console.log(`  感情：交往過 ${pct(by((r) => r.dated), N)}  分手過 ${pct(by((r) => r.brokeUp), N)}  結局時已婚 ${pct(by((r) => r.married), N)}`);
     const dist = (k) => ['S', 'A', 'B', 'C', 'D'].map((g) => g + ':' + pct(by((r) => r[k] === g), N)).join(' ');
     console.log(`  健康評等 ${dist('gh')}｜幸福度 ${dist('gm')}｜慢性病 ${pct(by((r) => r.chronic), N)}｜曾可財富自由 ${pct(by((r) => r.fire), N)}`);
     console.log(`  病倒率 ${pct(by((r) => r.collapsed), N)}  平均傳承點 ${avg(runs, 'legacy')}`);
+    const mid = (k) => { const v = runs.map((r) => r[k]).sort((a, b) => a - b); return AW.fmtMoney(v[Math.floor(v.length / 2)]); };
+    console.log(`  金錢：結局存款中位數 ${mid('money')}  繳稅中位數 ${mid('tax')}  負債過 ${pct(by((r) => r.debt), N)}  破產 ${pct(by((r) => r.ending === 'bankrupt'), N)}｜朋友平均 ${avg(runs, 'npcs')} 人${es.length ? `  與王選手交手 ${avg(es, 'h2h')} 次` : ''}`);
     console.log('  結局', JSON.stringify(endings));
   }
 }

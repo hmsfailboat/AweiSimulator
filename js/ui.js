@@ -251,7 +251,9 @@
         <div class="group conds"><div class="g-title">狀態</div>${this.bar(s, 'health')}${this.bar(s, 'mood')}</div>
         ${this.rStatus(s)}
         ${this.rLoveBox(s)}
-        <div class="money">💰 ${AW.fmtMoney(money)} ${money !== pm ? `<em class="${money > pm ? 'up' : 'down'}">${money > pm ? '+' : ''}${AW.fmtMoney(money - pm)}</em>` : ''}</div>
+        ${this.rFriendsBox(s)}
+        <div class="money ${money < 0 ? 'debt' : ''}">💰 ${AW.fmtMoney(money)} ${money !== pm ? `<em class="${money > pm ? 'up' : 'down'}">${money > pm ? '+' : ''}${AW.fmtMoney(money - pm)}</em>` : ''}</div>
+        ${AW.Finance.invested(s) ? `<div class="muted small">📈 投資中 ${AW.fmtMoney(AW.Finance.invested(s))}</div>` : ''}
         ${this.rShopBtns(s)}
         <div class="trait-tag" title="${esc(t.desc || '')}">${t.icon || ''} 天賦：${esc(t.name || '無')}</div>`;
     },
@@ -271,11 +273,29 @@
     rShopBtns(s) {
       const open = AW.Shop.open(s);
       const cas = s.age >= AW.Casino.MIN_AGE && !s.flags.noGamble;
+      const fin = AW.Finance.canManage(s);
+      const friends = AW.NPC.metList(s).length;
       const charm = (s.items && s.items.charm) || 0;
       return `<div class="shop-btns">
         <button class="btn sm" data-act="item-shop" ${open ? '' : 'disabled'}>🛒 道具商店</button>
         <button class="btn sm" data-act="casino" ${open && cas ? '' : 'disabled'} title="${cas ? '' : (s.flags.noGamble ? '已戒賭' : '18 歲解鎖')}">🎰 賭場</button>
+        <button class="btn sm" data-act="finance" ${open && fin ? '' : 'disabled'} title="${fin ? '' : '18 歲解鎖'}">💰 理財</button>
+        <button class="btn sm" data-act="friends" ${friends ? '' : 'disabled'} title="${friends ? '' : '還沒有認識朋友'}">👥 朋友</button>
       </div>${charm ? `<div class="muted small">🍀 幸運御守 ×${charm}（下一次擲骰 +${Math.round(AW.CHARM_BONUS * 100)}%）</div>` : ''}`;
+    },
+
+    // 朋友：面板上的小頭像列，滑鼠移上去看好友度
+    rFriendsBox(s) {
+      const list = AW.NPC.metList(s);
+      if (!list.length) return '';
+      return `<div class="friends-box" data-act="friends">${list.map((id) => {
+        const b = AW.NPC.bond(s, id);
+        return `<span class="f-chip ${b >= 60 ? 'close' : b < 20 ? 'far' : ''}" title="${esc(AW.NPC.name(id))}：好友度 ${b}">${AW.NPC.icon(id)}<i style="width:${b}%"></i></span>`;
+      }).join('')}</div>`;
+    },
+    bondChips(list) {
+      return (list || []).filter((x) => x.v).map((x) =>
+        `<span class="chip ${x.v > 0 ? 'up' : 'down'}" title="好友度">${AW.NPC.icon(x.id)}${esc(AW.NPC.name(x.id))} ${x.v > 0 ? '+' : ''}${x.v}</span>`).join('');
     },
 
     rCareerBox(s) {
@@ -302,7 +322,7 @@
         const need = Eg.promoNeed(s);
         return `<div class="career">
           <div class="c-row"><span>${Eg.COMPANY[e.company].icon} ${esc(e.companyName)}</span><span class="muted">${Eg.COMPANY[e.company].name}</span></div>
-          <div class="c-row"><span>👔 ${Eg.rankName(s)}</span><span class="muted">${e.lastGrade ? `上次考績 ${e.lastGrade}` : ''}</span></div>
+          <div class="c-row"><span>👔 ${Eg.rankName(s)}</span><span class="muted">${e.lastGrade ? `上次考績 ${e.lastGrade}${e.lastPlace ? `・同期第 ${e.lastPlace}` : ''}` : ''}</span></div>
           ${e.rank < 6 ? `<div class="c-row"><span>升遷點數</span><span>${e.promo} / ${need}</span></div>
           <div class="bar thin"><div class="fill k-leader" style="width:${Math.min(100, e.promo / need * 100)}%"></div></div>` : ''}
         </div>`;
@@ -321,8 +341,11 @@
       return `<details open class="log-box"><summary>📜 人生紀錄</summary><div class="log-list">${html}</div></details>`;
     },
 
+    // 這一年有沒有賽季動畫（電競賽季、職場賽季、創業之年）
+    hasSeason(s) { return s.phase === 'esports' || (s.phase === 'engineer' && s.eng.stage !== 'uni'); },
     stepper(s) {
-      const steps = s.phase === 'esports' ? ['事件', '訓練', '賽季', '結算'] : ['事件', '行動', '結算'];
+      const steps = s.phase === 'esports' ? ['事件', '訓練', '賽季', '結算']
+        : this.hasSeason(s) ? ['事件', '行動', s.eng.stage === 'startup' ? '創業之年' : '職場賽季', '結算'] : ['事件', '行動', '結算'];
       const cur = { event: 0, action: 1, season: 2, summary: steps.length - 1 }[s.step];
       return `<div class="stepper">${steps.map((n, i) => `<span class="${i === cur ? 'cur' : i < cur ? 'done' : ''}">${n}</span>`).join('<i>›</i>')}</div>`;
     },
@@ -349,6 +372,8 @@
       if (f.lag) out.push('📶 網路陰影：賽季戰力 -4');
       if (f.halfAllowance) out.push('🏚️ 家裡手頭緊：零用錢減半');
       if (f.extraSlot) out.push('⏰ 今年行動數 +1');
+      const debt = AW.Finance.statusText(s);
+      if (debt) out.push(debt);
       return out.length ? `<div class="flags">${out.map((x) => `<span class="pill warn">${x}</span>`).join('')}</div>` : '';
     },
 
@@ -369,7 +394,7 @@
         }
       } else {
         const roll = r.roll ? `<div class="roll ${r.roll.ok ? 'ok' : 'bad'}">🎲 成功率 ${Math.round(r.roll.p * 100)}%${r.roll.charm ? '（🍀 御守加成）' : ''} → ${r.roll.ok ? '成功！' : '失敗……'}</div>` : '';
-        actions = `<div class="result">${roll}${r.text ? `<p>${esc(r.text)}</p>` : ''}<div class="chips-row">${this.chips(r.deltas) || '<span class="muted">（沒有數值變化）</span>'}</div></div>
+        actions = `<div class="result">${roll}${r.text ? `<p>${esc(r.text)}</p>` : ''}<div class="chips-row">${(this.chips(r.deltas) + this.bondChips(r.bonds)) || '<span class="muted">（沒有數值變化）</span>'}</div></div>
           <div class="choices"><button class="btn primary" data-act="event-next">繼續 ▶</button></div>`;
       }
       return `<section class="card event pop">
@@ -397,7 +422,7 @@
         </button>`;
       }).join('');
       const can = u.selected.length >= Math.min(n, list.filter((x) => x.ok).length) && u.selected.length > 0;
-      const label = s.phase === 'esports' ? '開始賽季 ▶' : '結束這一年 ▶';
+      const label = s.phase === 'esports' ? '開始賽季 ▶' : this.hasSeason(s) ? '開始這一年的挑戰 ▶' : '結束這一年 ▶';
       return `<section class="card">
         <h3>${s.phase === 'esports' ? '選擇本季的訓練重點' : '選擇今年要做的事'} <span class="pill ${u.selected.length === n ? 'ok' : ''}">${u.selected.length} / ${n}</span></h3>
         <p class="muted small">數值為基礎值，實際成長受天賦、年齡、心情與目前數值（越高越難練）影響。</p>
@@ -440,8 +465,10 @@
       let left = this.ui.cursor == null ? total : this.ui.cursor;
       const done = left >= total;
       let html = '';
+      let stop = false;
       for (const st of season.stages) {
-        if (left <= 0) break;
+        // 沒有比賽的階段（排行榜、尾牙）要等前面全部播完才出現
+        if (stop || (left <= 0 && st.matches.length)) break;
         let rows = '';
         let stageDone = true;
         for (const m of st.matches) {
@@ -452,19 +479,24 @@
           if (!full) stageDone = false;
           const w = shown.filter(Boolean).length;
           const l = shown.length - w;
-          rows += `<div class="match ${full ? (m.won ? 'won' : 'lost') : 'live'}">
+          const res = m.vote ? `${w}:${l}${full ? (m.won ? ' 通過' : ' 落選') : ''}` : full ? `${w}:${l} ${m.won ? '勝' : '敗'}` : `${w}:${l}`;
+          rows += `<div class="match ${full ? (m.won ? 'won' : 'lost') : 'live'} ${m.rival ? 'rival' : ''}">
             <span class="m-round">${esc(m.round || (m.bo === 1 ? 'BO1' : `BO${m.bo}`))}</span>
-            <span class="m-opp">vs ${esc(m.oppName)} <small>(${m.opp})</small></span>
-            <span class="m-prob" title="單局勝率">${Math.round(m.p * 100)}%</span>
-            <span class="m-games">${shown.map((g) => (g ? '🟢' : '🔴')).join('')}</span>
-            <span class="m-res">${full ? `${w}:${l} ${m.won ? '勝' : '敗'}` : `${w}:${l}`}</span>
+            <span class="m-opp">${m.rival ? '🔥 ' : ''}${m.vote ? '' : 'vs '}${esc(m.oppName)} ${m.vote ? '' : `<small>(${m.opp})</small>`}${m.tag ? ` <small class="m-tag">${esc(m.tag)}</small>` : ''}</span>
+            <span class="m-prob" title="${m.vote ? '每席贊成機率' : '單局勝率'}">${Math.round(m.p * 100)}%</span>
+            <span class="m-games">${shown.map((g) => (m.vote ? (g ? '✅' : '❌') : g ? '🟢' : '🔴')).join('')}</span>
+            <span class="m-res">${res}</span>
           </div>`;
         }
-        html += `<div class="stage"><div class="stage-name">${st.icon} ${esc(st.name)}</div>${rows}
-          ${stageDone ? `<div class="stage-note ${st.passed ? 'ok' : 'bad'}">${esc(st.note)}</div>` : ''}</div>`;
+        if (!stageDone) stop = true;
+        const table = stageDone && st.table ? `<div class="peer-table">${st.table.map((r, i) =>
+          `<div class="c-row ${r.me ? 'me' : ''}"><span>${i + 1}. ${esc(r.name)}</span><b>KPI ${r.v}</b></div>`).join('')}</div>` : '';
+        html += `<div class="stage"><div class="stage-name">${st.icon} ${esc(st.name)}</div>${rows}${table}
+          ${stageDone ? `<div class="stage-note ${st.neutral ? '' : st.passed ? 'ok' : 'bad'}">${esc(st.note)}</div>` : ''}</div>`;
       }
+      const title = season.title || `🎮 ${s.esports.team} 的賽季`;
       return `<section class="card season" id="season">
-        <h3>🎮 ${esc(s.esports.team)} 的賽季 <span class="pill">隊伍戰力 ${season.T}</span></h3>
+        <h3>${esc(title)} <span class="pill">${esc(season.pill || `隊伍戰力 ${season.T}`)}</span></h3>
         ${html}
         <div class="row end">${done
           ? '<button class="btn primary big" data-act="season-done">查看年度結算 ▶</button>'
@@ -477,21 +509,23 @@
       const diff = E.yearDiff(s);
       const acts = (s.actionResults || []).map((r) => {
         const a = AW.ACTION_MAP[r.id];
-        return `<div class="sum-act"><span>${a.icon} ${esc(a.name)}</span>${r.text ? `<small>${esc(r.text)}</small>` : ''}</div>`;
+        const bonds = this.bondChips(r.bonds);
+        return `<div class="sum-act"><span>${a.icon} ${esc(a.name)}</span>${r.text ? `<small>${esc(r.text)}</small>` : ''}${bonds ? `<div class="chips-row">${bonds}</div>` : ''}</div>`;
       }).join('');
       const notes = s.yearNotes.map((n) => `<div class="note"><span>${n.icon}</span><span>${esc(n.text)}</span></div>`).join('');
       let review = '';
       const rv = s.review;
       if (rv && !rv.startup) {
+        const pts = rv.pts + (rv.top ? 1 : 0);
         review = `<div class="review"><div class="grade g-${rv.grade}">${rv.grade}</div><div>
-          <div><b>年度考績</b>（升遷點數 ${rv.pts >= 0 ? '+' : ''}${rv.pts}）</div>
+          <div><b>年度考績</b>${rv.kpi != null ? `・KPI ${rv.kpi}` : ''}${rv.place ? `・同期第 ${rv.place}` : ''}（升遷點數 ${pts >= 0 ? '+' : ''}${pts}）</div>
           ${rv.promoted ? `<div class="ok">🎉 升任「${esc(AW.Engineer.RANKS[rv.rank].name)}」！</div>` : ''}
           ${rv.rank < 6 ? `<div class="muted small">下一職級「${esc(AW.Engineer.RANKS[rv.rank + 1].name)}」：點數 ${rv.promo}/${rv.need}${rv.miss.length ? `，還需要 ${esc(rv.miss.join('、'))}` : '，能力已達標'}</div>` : ''}
         </div></div>`;
       } else if (rv && rv.startup) {
         const label = { up: '🚀 公司晉級！', hold: '😐 進展有限', bad: '📉 遭遇挫折', bankrupt: '💥 公司倒閉' }[rv.result];
         review = `<div class="review"><div class="grade ${rv.result === 'up' ? 'g-S' : rv.result === 'hold' ? 'g-B' : 'g-D'}">${AW.Engineer.STARTUP[rv.stage].icon}</div>
-          <div><b>${label}</b><div class="muted small">創業評分 ${rv.score}（≥ 58 晉級；階段越後面越難）</div></div></div>`;
+          <div><b>${label}</b><div class="muted small">${rv.W != null ? `季度目標達成 ${rv.W}／4（3 季以上可以募資；階段越後面越難）` : `創業評分 ${rv.score}`}</div></div></div>`;
       }
       const end = s.pendingEnding;
       const canRetire = !end && ((s.phase === 'esports' && AW.Esports.canRetire(s)) || (s.phase === 'engineer' && AW.Engineer.canRetire(s)));
@@ -500,6 +534,7 @@
         ${acts ? `<div class="sum-acts">${acts}</div>` : ''}
         ${review}
         ${notes ? `<div class="notes">${notes}</div>` : ''}
+        ${this.rLedger(s)}
         <div class="g-title">今年的變化</div>
         <div class="chips-row">${this.chips(diff) || '<span class="muted">平靜的一年。</span>'}</div>
         ${s.decision ? this.rDecision(s) : ''}
@@ -509,6 +544,19 @@
           <button class="btn primary big" data-act="next-year" ${s.decision ? 'disabled' : ''}>${end ? '🎬 迎接結局 ▶' : '迎接下一年 ▶'}</button>
         </div>
       </section>`;
+    },
+
+    // 年度收支表
+    rLedger(s) {
+      const y = s.fin && s.fin.year;
+      if (!y) return '';
+      const line = (label, v) => `<div class="c-row"><span>${esc(label)}</span><b class="${v >= 0 ? 'ok' : 'bad'}">${v >= 0 ? '+' : ''}${esc(AW.fmtMoney(v))}</b></div>`;
+      let html = '';
+      if (y.income) html += line(AW.tx('finance', 'line_income', s), y.income);
+      for (const l of y.lines) html += line(AW.tx('finance', 'line_' + l.key, s), l.v);
+      const net = y.income + y.lines.reduce((a, l) => a + l.v, 0);
+      if (y.invest) html += `<div class="c-row muted small"><span>${esc(AW.tx('finance', 'line_invest', s))}（未贖回）</span><span>${y.invest >= 0 ? '+' : ''}${esc(AW.fmtMoney(y.invest))}</span></div>`;
+      return `<details class="ledger" ${net < 0 ? 'open' : ''}><summary>💰 年度收支：<b class="${net >= 0 ? 'ok' : 'bad'}">${net >= 0 ? '+' : ''}${esc(AW.fmtMoney(net))}</b></summary>${html}</details>`;
     },
 
     rDecision(s) {
@@ -606,6 +654,10 @@
         career = `<h4>💼 職涯</h4><div class="c-row"><span>最高職級</span><b>${esc(AW.Engineer.RANKS[Math.max(s.eng.bestRank, s.eng.rank)].name)}</b></div>
           ${s.flags.founded ? `<div class="c-row"><span>創業</span><b>${esc(s.eng.startupName)}・${AW.Engineer.STARTUP[s.eng.startup].name}</b></div>` : ''}`;
       }
+      if (s.rival) career += `<div class="c-row"><span>🔥 對王選手</span><b>${s.rival.w} 勝 ${s.rival.l} 敗</b></div>`;
+      const friends = AW.NPC.metList(s).map((id) => `<span class="chip info">${AW.NPC.icon(id)}${esc(AW.NPC.name(id))} ${AW.NPC.bond(s, id)}</span>`).join('');
+      if (friends) career += `<h4>👥 朋友（好友度）</h4><div class="chips-row">${friends}</div>`;
+      if (s.fin && s.fin.taxTotal) career += `<div class="c-row"><span>🧾 一生繳稅</span><b>${AW.fmtMoney(s.fin.taxTotal)}</b></div>`;
       const stats = ['fps', 'dota', 'reflex', 'study', 'social', 'tech', 'leader', 'teamwork', 'fame']
         .filter((k) => s.stats[k]).map((k) => `<span class="chip info">${AW.STATS[k].icon}${Math.round(s.stats[k])}</span>`).join('');
       return `${this.header()}
@@ -679,12 +731,69 @@
             <div class="si-body"><b>${esc(it.name)}</b><div class="muted small">${esc(AW.Text.fill(it.desc, s))}</div>
               ${!ok && !owned && reason ? `<div class="ac-lock">🔒 ${esc(reason)}</div>` : ''}</div>
             ${owned ? '<span class="pill ok">已擁有</span>'
-              : `<button class="btn sm ${ok ? 'primary' : ''}" data-act="buy-item" data-id="${it.id}" ${ok ? '' : 'disabled'}>${AW.fmtMoney(AW.Shop.price(s, it))}</button>`}
+              : `<button class="btn sm ${ok ? 'primary' : ''}" data-act="buy-item" data-id="${it.id}" ${ok ? '' : 'disabled'}>${it.loan ? '頭期 ' : ''}${AW.fmtMoney(AW.Shop.cost(s, it))}</button>`}
           </div>`).join('');
         return rows ? `<h4 class="shop-h">${title} <small>${esc(hint)}</small></h4>${rows}` : '';
       }).join('');
       return `<h3>🛒 道具商店 <span class="pill gold">💰 ${AW.fmtMoney(s.stats.money)}</span></h3>${html}
         <div class="row end"><button class="btn primary" data-act="close-modal">離開</button></div>`;
+    },
+
+    // ======================= 理財 =======================
+    rFinance() {
+      const s = this.S;
+      const F = AW.Finance;
+      const f = s.fin;
+      const open = AW.Shop.open(s);
+      const styles = F.STYLES.map((st, i) => `<button class="tab ${f.style === i ? 'on' : ''}" data-act="set-style" data-i="${i}" ${open ? '' : 'disabled'}>
+        ${esc(AW.tx('finance', 'style_' + st.id, s))}<small>${esc(AW.tx('finance', 'style_' + st.id + '_desc', s))}</small></button>`).join('');
+      const money = s.stats.money;
+      const amts = [100000, 1000000, 10000000].filter((a) => a <= money);
+      const inv = Object.keys(F.PRODUCTS).filter((id) => F.productOk(s, id) || f.inv[id]).map((id) => {
+        const v = f.inv[id] || 0;
+        const btns = F.productOk(s, id) && open ? amts.map((a) => `<button class="bet" data-act="invest" data-id="${id}" data-a="${a}">+${AW.fmtMoney(a)}</button>`).join('')
+          + (money > 0 ? `<button class="bet all" data-act="invest" data-id="${id}" data-a="all">全部</button>` : '') : '';
+        return `<div class="shop-item"><div class="si-body"><b>${esc(AW.tx('finance', 'inv_' + id, s))}</b>
+            <span class="muted small">${esc(AW.tx('finance', 'inv_' + id + '_desc', s))}</span>
+            <div class="bets left">${btns}</div></div>
+          <div class="inv-val"><b class="gold">${v ? AW.fmtMoney(v) : '—'}</b>${v && open ? `<button class="btn sm" data-act="withdraw" data-id="${id}">贖回</button>` : ''}</div></div>`;
+      }).join('');
+      const loans = f.loans.map((l) => `<div class="c-row"><span>${esc(AW.tx('finance', 'line_loan_' + l.id, s))}</span><span>每年 ${AW.fmtMoney(l.pay)}・還剩 ${l.left} 年</span></div>`).join('');
+      return `<h3>💰 理財 <span class="pill gold">💰 ${AW.fmtMoney(money)}</span>${f.taxTotal ? `<span class="pill">🧾 累計繳稅 ${AW.fmtMoney(f.taxTotal)}</span>` : ''}</h3>
+        <h4 class="shop-h">🏠 生活水準 <small>${F.active(s) ? `今年生活費 ${AW.fmtMoney(F.livingCost(s))}` : '還沒出社會，暫時不用付'}</small></h4>
+        <div class="tabs styles">${styles}</div>
+        <p class="muted small">${esc(AW.tx('finance', 'style_hint', s))}</p>
+        <h4 class="shop-h">📈 投資 <small>${esc(AW.tx('finance', 'inv_hint', s))}</small></h4>
+        ${inv}
+        ${loans ? `<h4 class="shop-h">🏦 貸款</h4>${loans}` : ''}
+        ${E.canFire(s) || s.phase === 'ended' ? '' : (s.age >= 30 ? `<p class="muted small">🏖️ 財富自由目標：35～49 歲時身家 ${AW.fmtMoney(E.fireTarget(s))}（每年開銷 × 25，最少 ${AW.fmtMoney(E.FIRE.min)}），且心情 70 以上</p>` : '')}
+        <div class="row end"><button class="btn primary" data-act="close-modal">關閉</button></div>`;
+    },
+
+    // ======================= 朋友 =======================
+    rFriends() {
+      const s = this.S;
+      const cards = AW.NPC.metList(s).map((id) => {
+        const b = AW.NPC.bond(s, id);
+        const hires = Object.keys(AW.STAFF).filter((job) => AW.STAFF[job].npc === id).map((job) => {
+          const st = AW.NPC.hireState(s, job);
+          if (st.hidden) return '';
+          const label = job === 'chef' ? '🍳 請他當私人廚師' : '🛡️ 請他當保全';
+          if (st.hired) return `<button class="btn sm danger" data-act="fire-staff" data-job="${job}">解除雇用（年薪 ${AW.fmtMoney(AW.STAFF[job].salary)}）</button>`;
+          return `<button class="btn sm ${st.ok ? 'primary' : ''}" data-act="hire" data-job="${job}" ${st.ok ? '' : 'disabled'}>${label}（年薪 ${AW.fmtMoney(AW.STAFF[job].salary)}）</button>${st.ok ? '' : `<span class="ac-lock">🔒 ${esc(st.reason)}</span>`}`;
+        }).join('');
+        return `<div class="npc-card"><div class="si-icon">${AW.NPC.icon(id)}</div><div class="si-body">
+          <div class="c-row"><b>${esc(AW.NPC.name(id))}</b><span class="muted small">${esc(AW.tx('npc.' + id, 'job', s))}・${s.npcs[id].met} 歲認識</span></div>
+          <div class="stat"><div class="stat-top"><span>好友度</span><b>${b}</b></div><div class="bar"><div class="fill k-social" style="width:${b}%"></div></div></div>
+          <div class="muted small">${esc(AW.tx('npc.' + id, 'desc', s))}</div>
+          ${hires ? `<div class="row wrap">${hires}</div>` : ''}</div></div>`;
+      }).join('');
+      const unmet = AW.NPC_ORDER.length - AW.NPC.metList(s).length;
+      const rival = s.rival ? `<p class="muted small">🔥 宿敵王選手：${esc(s.rival.team)}（${AW.Esports.TIERS[s.rival.tier].name}），你的戰績 ${s.rival.w} 勝 ${s.rival.l} 敗</p>` : '';
+      return `<h3>👥 朋友</h3>
+        <p class="muted small">「🎮 揪團開黑」可以提升開黑朋友的好友度；太久沒聯絡，好友度會慢慢下降（人緣 60 以上下降較慢）。${unmet ? `還有 ${unmet} 位朋友沒認識，人緣越高越容易遇到。` : ''}</p>
+        ${rival}${cards}
+        <div class="row end"><button class="btn primary" data-act="close-modal">關閉</button></div>`;
     },
 
     // ======================= 賭場 =======================
@@ -731,7 +840,9 @@
         ${st.ok ? '' : `<p class="ac-lock center-text">🔒 ${esc(st.reason)}</p>`}
         ${last}
         <p class="muted small center-text">贏了心情變好，輸了心情變差；一次輸掉一半家產會很受打擊。</p>
-        <div class="row end"><button class="btn" data-act="close-modal">離開賭場</button></div>`;
+        <div class="row end">${AW.Finance.canShark(s) && !s.flags.noGamble
+          ? `<button class="btn danger sm" data-act="shark" title="${esc(AW.tx('finance', 'shark_desc', s))}">${esc(AW.tx('finance', 'shark_btn', s))}</button>` : ''}
+          <button class="btn" data-act="close-modal">離開賭場</button></div>`;
     },
 
     // ======================= 圖鑑 =======================
@@ -780,11 +891,14 @@
           <p>從 0 歲開始養成阿維（劉家維）。每一年會遇到隨機事件，並選擇要做的事來提升能力。</p>
           <ul>
             <li>🎂 <b>18 歲成年檢定</b>：遊戲能力（FPS 或 DOTA ≥ 60）與反應力（≥ 42）達標可參加戰隊試訓；學力 ≥ 50 可讀資工系。</li>
-            <li>🎮 <b>電競職涯</b>：以「Aweiisa＿＿」之名出道，目標是<b>世界冠軍</b>。</li>
-            <li>💻 <b>工程師職涯</b>：從初級工程師一路升遷或創業，目標是<b>科技公司大老闆</b>。</li>
-            <li>❤️ <b>健康</b> ≥ 70 擲骰 +5%；低於 40 成長變慢、表現變差；長期過低會得慢性病；病倒 3 次這一局就結束了。</li>
+            <li>🎮 <b>電競職涯</b>：以「Aweiisa＿＿」之名出道，目標是<b>世界冠軍</b>。宿敵王選手也會在賽場上等你。</li>
+            <li>💻 <b>工程師職涯</b>：每年要拚季度專案、和同期比 KPI、通過升遷答辯，或是創業募資，目標是<b>科技公司大老闆</b>。</li>
+            <li>❤️ <b>健康</b> ≥ 70 擲骰 +5%；低於 40 成長變慢、表現變差；長期過低會得慢性病；病倒 3 次這一局就結束了。30 歲後身體會慢慢變差。</li>
             <li>😊 <b>心情</b> ≥ 70 成長 +10%；低於 40 成長變慢、擲骰 -5%；太低可能陷入憂鬱。</li>
-            <li>🏁 結局會依一生的平均健康與心情評等，評等高可多拿傳承點。35～49 歲時存款 1 億、心情好，可以選擇「財富自由」提早退休。</li>
+            <li>📉 健康和心情越接近滿值越難再往上補，要靠長期好好休息。</li>
+            <li>💰 <b>理財</b>（18 歲起）：出社會後要繳所得稅、付生活費；可以選擇生活水準、投資、買房。存款變負數會開始負債，太久還不出來就會破產。</li>
+            <li>👥 <b>朋友</b>：人緣越高，越容易認識朋友。「揪團開黑」可以提升好友度，好朋友會在關鍵時刻幫你一把。</li>
+            <li>🏁 結局會依一生的平均健康與心情評等，評等高可多拿傳承點。35～49 歲時身家夠多、心情好，可以選擇「財富自由」提早退休。</li>
             <li>📈 能力越高越難練，FPS / DOTA 在 6～15 歲成長最快，反應力在 12 歲前成長最快。</li>
             <li>🛒 <b>道具商店</b>：用金錢買裝備（永久成長加成）、消耗品、額外行動數、幸運御守；有交往對象時還能買禮物。</li>
             <li>🎰 <b>賭場</b>（18 歲起）：骰寶、拉霸、彩券，每年最多 10 次。十賭九輸，小賭怡情。</li>
@@ -804,6 +918,44 @@
         this.toast(`${r.it.icon} 購買「${esc(r.it.name)}」<div class="chips-row">${this.chips(r.deltas)}</div>`);
         this.render();
         this.modalUpdate(this.rItemShop(), 'wide');
+      },
+
+      // 理財
+      finance() { if (AW.Shop.open(this.S) && AW.Finance.canManage(this.S)) this.modal(this.rFinance(), 'wide'); },
+      'set-style'(d) {
+        if (!AW.Shop.open(this.S)) return;
+        if (AW.Finance.setStyle(this.S, Number(d.i))) this.render();
+        this.modalUpdate(this.rFinance(), 'wide');
+      },
+      invest(d) {
+        if (!AW.Finance.invest(this.S, d.id, d.a === 'all' ? 'all' : Number(d.a))) return;
+        this.render();
+        this.modalUpdate(this.rFinance(), 'wide');
+      },
+      withdraw(d) {
+        if (!AW.Finance.withdraw(this.S, d.id)) return;
+        this.render();
+        this.modalUpdate(this.rFinance(), 'wide');
+      },
+      shark() {
+        const r = AW.Finance.borrowShark(this.S);
+        if (!r) return;
+        this.toast(`🦈 ${esc(AW.tx('finance', 'shark_log', this.S))}`);
+        this.render();
+        this.modalUpdate(this.rCasino());
+      },
+
+      // 朋友
+      friends() { if (AW.NPC.metList(this.S).length) this.modal(this.rFriends(), 'wide'); },
+      hire(d) {
+        if (!AW.NPC.hire(this.S, d.job)) return;
+        this.render();
+        this.modalUpdate(this.rFriends(), 'wide');
+      },
+      'fire-staff'(d) {
+        if (!AW.NPC.fire(this.S, d.job)) return;
+        this.render();
+        this.modalUpdate(this.rFriends(), 'wide');
       },
 
       // 賭場

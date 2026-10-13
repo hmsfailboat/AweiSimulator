@@ -70,6 +70,8 @@
         s.life = s.life || { n: 0, health: 0, mood: 0 };
         if (s.love === undefined) s.love = null;
         if (!s.love && s.flags.girlfriend) { AW.Love.start(s); s.love.since = Math.max(13, s.age - 1); }
+        // v1.2：金錢、朋友、職場
+        Engine.initExtras(s);
         AW.rng.seed(s.rng);
         return s;
       } catch (e) { return null; }
@@ -118,6 +120,7 @@
         yearStart: null, decision: null, pendingEnding: null, season: null, review: null,
         esports: null, eng: null, milestones: { tierUps: 0, promotions: 0 }, ending: null,
       };
+      this.initExtras(s);
       const alloc = opts.alloc || {};
       for (const k of AW.BIRTH_STATS) s.stats[k] = (alloc[k] || 0) * 3;
       const t = AW.TRAITS[s.trait] || {};
@@ -125,6 +128,18 @@
       this.addLog(s, '🍼', `劉家維誕生了！天賦：${t.icon || ''}${t.name || '無'}`);
       this.beginYear(s);
       return s;
+    },
+
+    // 補上 v1.2 新增的欄位（新局與舊存檔共用）
+    initExtras(s) {
+      AW.Finance.init(s);
+      s.npcs = s.npcs || {};
+      s.staff = s.staff || {};
+      s.itemUse = s.itemUse || {};
+      s.itemSince = s.itemSince || {};
+      if (s.rival === undefined) s.rival = null;
+      if (s.esports && !s.rival) AW.Esports.startRival(s);
+      if (s.eng && s.eng.stage !== 'uni' && !s.eng.peers) AW.Office.makePeers(s);
     },
 
     // ---------- 階段 ----------
@@ -181,6 +196,7 @@
       s.season = null;
       s.review = null;
       s.yearStart = Object.assign({}, s.stats);
+      AW.Finance.beginYear(s);
       s.pendingEvents = this.rollEvents(s);
       s.step = s.pendingEvents.length ? 'event' : 'action';
       this.checkAchievements(s);
@@ -189,9 +205,11 @@
 
     rollEvents(s) {
       const phase = s.phase === 'student' ? 'student' : s.phase;
+      const guard = s.staff && s.staff.guard;
       const pool = AW.EVENTS.filter((e) =>
-        (e.phase === phase || e.phase === 'any') &&
+        (e.phase === phase || e.phase === 'any' || (Array.isArray(e.phase) && e.phase.includes(phase))) &&
         !(e.once && s.seen[e.id]) &&
+        !(e.threat && guard) &&
         (!e.cond || e.cond(s)));
       const out = [];
       const count = s.age === 0 ? 0 : AW.chance(0.25) ? 2 : 1;
@@ -214,15 +232,18 @@
     /** 套用一個 outcome，回傳 { text, deltas } */
     applyOutcome(s, o) {
       const deltas = AW.applyEffects(s, o.effects);
+      if (o.income) AW.mergeDeltas(deltas, AW.Finance.earn(s, AW.val(o.income, s)));
       if (o.year) for (const k of Object.keys(o.year)) s.yearFlags[k] = (s.yearFlags[k] || 0) + o.year[k];
       if (o.next) for (const k of Object.keys(o.next)) s.nextYearFlags[k] = (s.nextYearFlags[k] || 0) + o.next[k];
       if (o.flags) Object.assign(s.flags, o.flags);
+      const bonds = AW.NPC.applyBonds(s, AW.val(o.bond, s));
       const r = (o.run && o.run(s)) || {};
       if (r.deltas) AW.mergeDeltas(deltas, r.deltas);
+      if (r.bonds) bonds.push(...r.bonds);
       // 結果文字在 run 之後才取，才能用到 run 產生的變數（例：{另一半}）
       let text = AW.val(o.result, s) || '';
       if (r.text) text = text ? text + ' ' + r.text : r.text;
-      return { text, deltas };
+      return { text, deltas, bonds };
     },
 
     resolveEvent(s, idx) {
@@ -292,32 +313,33 @@
         const cost = this.actionCost(s, a);
         const deltas = cost ? AW.applyEffects(s, { money: -cost }) : {};
         AW.mergeDeltas(deltas, AW.applyEffects(s, a.effects));
+        if (a.income) AW.mergeDeltas(deltas, AW.Finance.earn(s, AW.val(a.income, s)));
         let text = '';
+        let bonds = [];
         if (a.run) {
           const r = a.run(s) || {};
           if (r.deltas) AW.mergeDeltas(deltas, r.deltas);
+          if (r.bonds) bonds = r.bonds;
           text = r.text || '';
         }
         if (a.perf) s.yearPerf += a.perf;
         if (a.sp) s.yearSp += a.sp;
         if (a.netcafe) s.counters.netcafe = (s.counters.netcafe || 0) + 1;
         s.counters[a.id] = (s.counters[a.id] || 0) + 1;
-        results.push({ id: a.id, text, deltas });
+        results.push({ id: a.id, text, deltas, bonds });
         s.yearActions.push(a.id);
         this.addLog(s, a.icon, a.name + (text ? ' — ' + text : ''));
       }
       s.actionResults = results;
 
-      if (s.phase === 'esports') {
-        // 賽季結果先算好，等動畫播完（seasonDone）才結算，避免劇透
-        s.season = AW.Esports.runSeason(s);
+      // 賽季結果先算好，等動畫播完（seasonDone）才結算，避免劇透
+      if (s.phase === 'esports') s.season = AW.Esports.runSeason(s);
+      else if (s.phase === 'engineer' && s.eng.stage === 'job') s.season = AW.Office.runYear(s);
+      else if (s.phase === 'engineer' && s.eng.stage === 'startup') s.season = AW.Office.runStartup(s);
+      if (s.season) {
         s.step = 'season';
         Save.save(s);
         return results;
-      }
-      if (s.phase === 'engineer') {
-        if (s.eng.stage === 'job') s.review = AW.Engineer.review(s);
-        else if (s.eng.stage === 'startup') s.review = AW.Engineer.startupYear(s);
       }
       s.step = 'summary';
       this.yearEnd(s);
@@ -342,8 +364,10 @@
       if (s.phase === 'esports') AW.Esports.yearEnd(s);
       if (s.phase === 'engineer') AW.Engineer.yearEnd(s);
       AW.Shop.yearEnd(s);
+      AW.Finance.yearEnd(s);
       if (s.flags.dog) AW.applyEffects(s, { health: 2, mood: 2 });
       AW.Love.yearEnd(s);
+      AW.NPC.yearEnd(s);
       this.healthYear(s);
       this.checkVitals(s, false);
       // 人生回顧：記錄每年的健康與心情
@@ -353,13 +377,27 @@
       this.checkAchievements(s);
     },
 
-    STRESS: { teen: 2, adult: 4 },
+    STRESS: { teen: 2, adult: 3 },
+    // 年齡造成的健康衰退：[幾歲起, 每年扣多少]
+    AGING: [[50, 3], [40, 2], [30, 1]],
 
-    // 長期健康：生活壓力、慢性病、體弱多病
+    // 職位越高壓力越大
+    jobStress(s) {
+      if (s.phase === 'esports') return s.esports.tier >= 4 ? 1 : 0;
+      if (s.phase === 'engineer') {
+        if (s.eng.stage === 'startup') return 2;
+        if (s.eng.stage === 'job') return s.eng.rank >= 5 ? 2 : s.eng.rank >= 3 ? 1 : 0;
+      }
+      return 0;
+    },
+
+    // 長期健康：生活壓力、年齡衰退、慢性病、體弱多病
     healthYear(s) {
       // 生活壓力：青少年與成人每年心情自然下降
-      const stress = s.phase === 'student' ? (s.age >= 12 ? this.STRESS.teen : 0) : this.STRESS.adult;
+      const stress = s.phase === 'student' ? (s.age >= 12 ? this.STRESS.teen : 0) : this.STRESS.adult + this.jobStress(s);
       if (stress) AW.applyEffects(s, { mood: -stress });
+      const aging = this.AGING.find(([age]) => s.age >= age);
+      if (aging) AW.applyEffects(s, { health: -aging[1] });
       if (s.flags.chronic) AW.applyEffects(s, { health: -4 });
       if (s.stats.health < 30) {
         s.counters.lowHealth = (s.counters.lowHealth || 0) + 1;
@@ -381,11 +419,12 @@
     },
     grade(v) { return v >= 80 ? 'S' : v >= 70 ? 'A' : v >= 60 ? 'B' : v >= 45 ? 'C' : 'D'; },
 
-    // 財富自由：35～49 歲、存款 1 億以上、心情好，可以提早退休
-    FIRE: { age: 35, maxAge: 49, money: 100000000 },
+    // 財富自由：35～49 歲、心情好，身家達到「每年開銷 × 25」（4% 法則，最少 3000 萬），可以提早退休
+    FIRE: { age: 35, maxAge: 49, min: 70000000, mult: 25 },
+    fireTarget(s) { return Math.max(this.FIRE.min, AW.Finance.yearlySpend(s) * this.FIRE.mult); },
     canFire(s) {
       return s.phase !== 'student' && s.phase !== 'ended' && !s.pendingEnding && s.age >= this.FIRE.age && s.age <= this.FIRE.maxAge
-        && s.stats.money >= this.FIRE.money && s.stats.mood >= AW.TIER.good;
+        && AW.Finance.netWorth(s) >= this.fireTarget(s) && s.stats.mood >= AW.TIER.good && s.stats.money >= 0;
     },
 
     checkVitals(s, quiet) {
@@ -516,6 +555,7 @@
 
     finish(s, endingId) {
       if (s.phase === 'ended') return s.ending;
+      AW.Finance.liquidate(s);
       const life = this.lifeAvg(s);
       // 職涯普通，但一生快樂又成家 → 平凡但幸福
       if (this.PLAIN_ENDINGS.includes(endingId) && life.mood >= this.HAPPY_MOOD && s.love && s.love.status === 'married') endingId = 'happy_life';

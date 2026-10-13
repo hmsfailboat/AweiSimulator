@@ -785,14 +785,6 @@ name = 下班做 Side Project
 desc = 有 25% 機會冒出創業點子。
 msg = 💡 Side project 意外有人用！這可能是創業的種子（創業成功率提升）。
 
-[action.invest]
-icon = 📈
-name = 投資理財
-desc = 拿三成資產去投資，-20% ~ +40%。
-lock = 需要 10 萬本金
-msg_win = 投資小賺一筆！
-msg_lose = 投資被套牢了……
-
 [action.date]
 icon = 💑
 name = 約會
@@ -1618,22 +1610,22 @@ desc = 技術力成長 +12%、學力成長 +5%
 [item.suit]
 icon = 👔
 name = 訂製西裝
-desc = 領導力、人緣成長 +10%
+desc = 領導力、人緣成長 +6%
 
 [item.car]
 icon = 🏎️
 name = 超跑
-desc = 買下時名氣 +8、心情 +15；之後每年心情 +4
+desc = 買下時名氣 +8、心情 +15；之後每年心情 +4，但新鮮感每年減半。每年保養費 40 萬
 
 [item.mansion]
 icon = 🏰
 name = 豪宅
-desc = 買下時心情 +20；之後每年心情 +6、健康 +4
+desc = 免房租、生活費 -40%；買下時心情 +20，之後每年心情 +6，但新鮮感每年減半。每年管理費 60 萬
 
 [item.supplement]
 icon = 💊
 name = 營養補給品
-desc = 健康 +8（每年限一次）
+desc = 健康 +5（每年限一次）。連續每年吃，效果會越來越差
 
 [item.newgame]
 icon = 🎮
@@ -1643,12 +1635,7 @@ desc = 心情 +8、遊戲能力 +1（每年限一次）
 [item.counsel]
 icon = 🛋️
 name = 心理諮商
-desc = 心情 +15（每年限一次）
-
-[item.spa]
-icon = 💆
-name = 頂級 SPA
-desc = 健康 +12、心情 +12（每年限一次）
+desc = 心情低於 40 時才能預約：心情 +12（每年限一次）
 
 [item.charm]
 icon = 🍀
@@ -1663,17 +1650,17 @@ desc = 今年行動數 +1（每年限一次，要在選擇行動前購買）
 [item.assistant]
 icon = 🗂️
 name = 私人助理
-desc = 今年行動數 +1（每年限一次，要在選擇行動前購買）
+desc = 今年行動數 +1（每年限一次，要在選擇行動前購買）。價格是去年收入的 3 成，最少 50 萬
 
 [item.coach]
 icon = 🧙
 name = 私人教練課
-desc = 主項目 +4、團隊默契 +2（每年限一次）
+desc = 主項目 +4、團隊默契 +2（每年限一次）。連續每年上課效果遞減
 
 [item.career_coach]
 icon = 🧭
 name = 高階主管教練
-desc = 領導力 +4、人緣 +2（每年限一次）
+desc = 領導力 +3、人緣 +1（每年限一次）。價格隨收入提高，連續每年上課效果遞減
 
 [item.flowers]
 icon = 💐
@@ -1689,4 +1676,486 @@ desc = 送給{另一半}：好感度 +20
 icon = 💎
 name = 鑽石項鍊
 desc = 送給{另一半}：好感度 +35、心情 +5
+
+
+# ============================================================
+#  朋友 NPC（v1.2）
+#  name 暱稱｜job 職業｜desc 介紹
+#  intro 學生時期認識的訊息｜intro_adult 成年後認識的訊息
+#  hire_need 雇用條件不足時的提示｜hire_log／fire_log 雇用／解雇的紀錄
+# ============================================================
+
+[npc.hu]
+icon = 💹
+name = 胡投顧
+job = 投資達人
+desc = 擅長操作台美股，家財萬貫。好友度越高，給的明牌越準；好友度 60 以上可以幫你代操投資。
+intro = 高中社團認識一個午休時間在算殖利率的怪同學，大家都叫他「胡投顧」。他說：「錢要放對地方，才會自己長大。」
+intro_adult = 朋友的聚會上，一個戴著金錶的人遞來名片：「我姓胡，大家都叫我胡投顧。有興趣聊聊台積電嗎？」
+
+[npc.haji]
+icon = 🏛️
+name = 哈基咩
+job = 市政府公務員
+desc = 在市政府上班，正在努力繳房貸。一起打遊戲的好夥伴，打得不太好，常被你噴，但兩人感情很好。
+intro = 網咖隔壁座位的小胖子一直送頭，被你罵了兩句，居然笑著說：「再一場！」——他就是後來大家口中的哈基咩。
+intro_adult = 朋友揪團開黑，多了一個打得很爛、但怎麼噴都不會生氣的傢伙。大家都叫他哈基咩，聽說在市政府上班。
+
+[npc.wang]
+icon = 🎯
+name = 王選手
+job = 電腦硬體公司工程師
+desc = FPS 造詣極高的開黑夥伴，也是你一輩子的勁敵。如果你成為職業選手，他也會出道，在賽場上和你一決高下。
+intro = FPS 排位一直被同一個 ID 爆頭，加了好友才發現他就住在隔壁學區。王選手——從那天起，你們比了一輩子。
+intro_adult = 一場 FPS 野團，對面有個傢伙槍法準得離譜。賽後他加了你好友：「我是王選手，下次再打。」
+intro_pro = 出道記者會上，一個同期新人走過來：「久仰，我是王選手。賽場上見。」
+
+[npc.fang]
+icon = 🍳
+name = 阿方
+job = 高級餐廳廚師
+desc = 在高級餐廳當廚師的開黑夥伴，手藝一流。有了自己的房子之後，可以請他來當私人廚師。
+intro = 網咖開黑時，有個同學總會帶自己做的飯糰來分大家吃。他叫阿方，夢想是當廚師。
+intro_adult = 朋友帶來一個新隊友，開黑前先端出一桌菜。他叫阿方，在高級餐廳當廚師。
+hire_need = 需要有自己的房子或豪宅
+hire_log = 請阿方擔任私人廚師，每天都吃得健康又美味。
+fire_log = 和阿方結束了雇傭關係，但朋友還是朋友。
+
+[npc.cat]
+icon = 🐱
+name = 長長貓
+job = 早餐店老闆
+desc = 開早餐店的開黑夥伴，空閒時會幫別人代練遊戲。代練雖然快，但被抓到可就麻煩了。
+intro = 早餐店老闆的兒子，邊煎蛋邊用一隻手打排位。大家叫他長長貓，聽說有在幫人代練。
+intro_adult = 常去的早餐店老闆認出你：「你也有在玩喔？晚上一起排！」他叫長長貓。
+
+[npc.corey]
+icon = 🛡️
+name = Corey
+job = 保全
+desc = 武力值很高的保全，也是開黑夥伴。有了豪宅之後，可以請他來當貼身保全，擋掉跟蹤狂與竊賊。
+intro = 網咖有人找你麻煩，一個高大的同學擋在你前面。對方看了他一眼就走了。他叫 Corey，打遊戲倒是很溫柔。
+intro_adult = 朋友介紹一個新隊友，身材壯得像衣櫃，打輔助卻細心得不得了。他叫 Corey，是保全。
+hire_need = 需要有豪宅
+hire_log = 請 Corey 擔任貼身保全。有他在，什麼都不用怕。
+fire_log = 和 Corey 結束了雇傭關係，但朋友還是朋友。
+
+
+# ============================================================
+#  朋友事件（v1.2）
+# ============================================================
+
+[event.npc_intro]
+icon = 🤝
+title = 網咖的新朋友
+text = 今天去網咖，旁邊坐了一個看起來很好相處的傢伙……
+
+[event.npc_squad_night]
+icon = 🎮
+title = 開黑之夜
+text = 群組突然炸開：「今晚全員到齊！」哈基咩已經上線、阿方帶了宵夜、長長貓剛收店、Corey 下班了、王選手在暖槍。
+result = 一路打到天亮。有人送頭、有人 Carry、有人在語音裡笑到岔氣——這就是青春啊。
+
+[event.npc_hu_save]
+icon = 💹
+title = 胡投顧的理財課
+text = 胡投顧把手機上的帳戶給你看：「零用錢存下來買 ETF，十年後你會感謝我。」
+choice1 = 跟著存
+result1 = 你開了人生第一個證券戶。胡投顧欣慰地點頭。
+choice2 = 錢就是拿來花的
+result2 = 胡投顧搖搖頭：「你會後悔的。」
+
+# 專屬變數：{金額}
+[event.npc_hu_tip]
+icon = 📈
+title = 胡投顧的明牌
+text = 胡投顧壓低聲音：「這檔下個月要噴，我自己押了一大筆。你要跟嗎？」（投入 {金額}）
+choice1 = 跟了！
+success1 = 一個月後股價翻漲，你和胡投顧在群組裡狂刷貼圖。
+fail1 = 股價一路往下，胡投顧傳來：「長期投資，長期投資……」
+choice2 = 謝謝，我不跟
+result2 = 胡投顧聳聳肩：「好吧，有錢不賺。」
+
+[event.npc_hu_dinner]
+icon = 🥩
+title = 胡投顧請吃飯
+text = 胡投顧又賺了一筆，包下整間牛排館請大家吃飯。
+result = 吃得很撐，順便聽了一整晚的總體經濟分析。
+
+[event.npc_haji_feed]
+icon = 💀
+title = 哈基咩又送頭了
+text = 決勝局，哈基咩第五次衝進敵人堆裡。語音裡傳來他的聲音：「我以為他們沒看到我……」
+choice1 = 開噴
+result1 = 「哈基咩你在衝三小！」罵完神清氣爽。哈基咩：「好啦好啦下一場會好好打。」
+choice2 = 一個人 Carry 他
+result2 = 你打出一波 1 打 5，哈基咩在語音裡大喊：「這就是我大腿！」
+choice3 = 乾脆跟他一起送
+result3 = 兩個人一起衝進去，笑到停不下來。輸了，但很快樂。
+
+[event.npc_haji_mortgage]
+icon = 🏠
+title = 哈基咩的房貸
+text = 哈基咩難得沒開麥，私訊你：「這個月房貸有點繳不出來……可以先借我 30 萬嗎？」
+choice1 = 借他 30 萬
+result1 = 「兄弟，我一定會還！」哈基咩說了三次謝謝。
+choice2 = 婉拒
+result2 = 「沒事沒事，我再想辦法。」那晚他沒有上線。
+
+[event.npc_haji_repay]
+icon = 💰
+title = 哈基咩還錢了
+text = 哈基咩把一個信封放在桌上：「30 萬，一毛不少。今天這頓我請！」
+result = 你們點了一桌熱炒，喝到半夜。
+
+[event.npc_haji_city]
+icon = 🎪
+title = 市政府的電競嘉年華
+text = 哈基咩說他負責承辦今年的市府電競嘉年華，要你一定要來。
+choice1 = 去捧場
+result1 = 現場人山人海，哈基咩穿著主辦單位背心忙進忙出，看到你就用力揮手。
+choice2 = 在家打排位就好
+result2 = 嘉年華再熱鬧，也比不上上分的快樂。
+
+[event.npc_wang_rank]
+icon = 🎯
+title = 段考後的排位對決
+text = 段考一結束，王選手就傳訊息：「看誰先上鑽石，輸的請飲料。」
+choice1 = 熬夜衝分
+success1 = 你搶先上了鑽石，截圖傳給王選手：「珍奶微糖去冰，謝謝。」
+fail1 = 王選手先上了。你熬了一整夜，最後還是得請他喝飲料。
+choice2 = 直接認輸請他喝飲料
+result2 = 王選手笑著說：「下次再比。」
+
+[event.npc_wang_school]
+icon = 🏫
+title = 校際賽對決
+text = 全國高中聯賽決賽，對面隊伍的王牌是——王選手。
+choice1 = 正面對決
+success1 = 最後一回合，你一槍爆頭。王選手摘下耳機，對你比了個大拇指。台下有職業隊的球探。
+fail1 = 王選手打出神仙操作。賽後他拍拍你的肩：「明年再來。」
+choice2 = 這次先讓給他
+result2 = 你選擇專心準備考試。王選手：「你跑去讀書了？」
+
+[event.npc_wang_gear]
+icon = 🖥️
+title = 王選手的員工價
+text = 王選手在電腦硬體公司上班：「我們公司的電競周邊，員工價打三折，要不要？」
+choice1 = 電競螢幕（8,000 元）
+result1 = 拿到最新的電競螢幕，反應力訓練事半功倍。
+choice2 = 機械鍵盤（3,000 元）
+result2 = 拿到頂級機械鍵盤，DOTA 手感大升級。
+choice3 = 不用啦
+result3 = 「好吧，有需要再跟我說。」
+
+[event.npc_fang_supper]
+icon = 🍜
+title = 阿方的宵夜
+text = 半夜十二點，阿方傳來：「剛下班，煮了一鍋牛肉麵，要不要來吃？」
+result = 熱騰騰的牛肉麵下肚，整個人都活過來了。
+
+[event.npc_fang_restaurant]
+icon = 🍽️
+title = 阿方要開餐廳
+text = 阿方存夠了錢，準備開一間自己的餐廳：「還差 100 萬，要不要一起當股東？」
+choice1 = 投資 100 萬
+success1 = 餐廳開幕後天天客滿，一年就回本，還分了 100 萬紅利。
+fail1 = 遇上房東漲租，餐廳撐不到一年就收了。阿方難過地向你道歉。
+choice2 = 開幕時去捧場就好
+result2 = 你訂了一個大花籃，吃了一頓好料。
+
+[event.npc_cat_breakfast]
+icon = 🥪
+title = 長長貓的早餐
+text = 經過長長貓的早餐店，他探頭出來：「老樣子？今天請你！」
+result = 蛋餅加奶茶，元氣滿滿的一天。
+
+# 專屬變數：{代練費}
+[event.npc_cat_boost]
+icon = 🐱
+title = 長長貓的代練服務
+text = 長長貓小聲說：「最近牌位卡住了吧？{代練費}，三天幫你上一個大段。」
+choice1 = 拜託了
+success1 = 三天後牌位直接跳了一大段，大家都說你變強了。
+fail1 = 被系統抓到代練，帳號被封鎖，還上了論壇的黑名單……
+choice2 = 自己的分自己打
+result2 = 長長貓：「有骨氣！」
+
+[event.npc_cat_help]
+icon = 🍳
+title = 早餐店人手不足
+text = 長長貓的店員請假，他一個人忙不過來：「明天早上可以來幫忙嗎？」
+choice1 = 五點起床去幫忙
+result1 = 煎了兩百個蛋，手臂很痠，但長長貓請你吃了一整個月的早餐。
+choice2 = 起不來
+result2 = 「好啦，沒關係。」
+
+[event.npc_corey_netcafe]
+icon = 🛡️
+title = 網咖被嗆
+text = 隔壁桌輸不起，站起來指著你罵。
+choice1 = 看向 Corey
+result1 = Corey 慢慢站起來，對方就安靜地坐回去了。
+choice2 = 用實力嗆回去
+success1 =
+success2 = 你在下一場把他打成 0 比 13，全網咖都在看。
+fail2 = 對方惱羞成怒推了你一把，你撞到桌角……
+
+[event.npc_corey_stalker]
+icon = 👀
+title = 跟蹤狂
+text = 最近總覺得有人在跟蹤你，信箱裡還出現了奇怪的信。
+choice1 = 找 Corey 幫忙
+result1 = Corey 在你家樓下站了一個禮拜，那個人再也沒出現過。
+choice2 = 報警處理
+result2 = 警察做了筆錄，但你還是好幾個月睡不好。
+choice3 = 自己處理
+success3 = 你當面跟對方說清楚，對方道歉離開了。
+fail3 = 對方情緒失控，你受了傷……
+
+[event.npc_corey_gym]
+icon = 🏋️
+title = Corey 的重訓課
+text = Corey：「你這樣不行，跟我去健身房。」
+result = 被操到隔天下不了床，但身體確實變好了。
+
+[event.robbery]
+icon = 🦹
+title = 闖空門
+text = 回到家，發現門鎖被撬開了，保險箱空空如也……
+result = 損失慘重。早知道就請個保全了。
+
+
+# ============================================================
+#  宿敵王選手（v1.2）
+#  專屬變數：{宿敵戰隊} 王選手目前的戰隊；{宿敵戰績} 你對王選手的戰績
+# ============================================================
+
+[rival]
+season_title = 🎮 {戰隊} 的賽季
+debut = 同一年，王選手也加入了 {宿敵戰隊}。你的宿敵出道了。
+debut_dota = 王選手居然也轉戰 DOTA，加入了 {宿敵戰隊}：「你在哪，我就在哪。」
+transfer = 王選手轉會到 {宿敵戰隊}。
+final_win = 決賽擊敗王選手！他走過來擁抱你：「這次算你贏。」（對戰成績 {宿敵戰績}）
+final_lose = 決賽輸給了王選手……他舉起獎盃時看向了你。（對戰成績 {宿敵戰績}）
+
+[event.rival_trash]
+icon = 🔥
+title = 賽前嗆聲
+text = 記者訪問王選手對你的看法，他笑著說：「他啊？我閉著眼睛都能打。」（目前對戰成績 {宿敵戰績}）
+choice1 = 在直播上嗆回去
+result1 = 「叫他練好再來。」影片一天破百萬觀看，粉絲們熱血沸騰。
+choice2 = 不回應，專心練習
+result2 = 你把怒氣全部帶進了訓練室。
+
+[event.rival_hug]
+icon = 🫂
+title = 宿敵的擁抱
+text = 比賽結束後，王選手在後台等你。（目前對戰成績 {宿敵戰績}）
+result = 「從國中打到現在，能跟你當對手，真的很爽。」你們像小時候一樣，一起去吃了宵夜。
+
+
+# ============================================================
+#  職場聯賽（v1.2）
+#  清單用頓號「、」分隔
+# ============================================================
+
+[office]
+title = 🏢 {公司} 的年度職場賽季
+title_startup = 🚀 {公司} 的創業之年
+projects = 支付系統重構、會員系統上雲、推薦演算法優化、App 大改版、資料庫搬家、年度大促銷、AI 客服導入、後台效能優化、老系統除錯、資安稽核、雙十一壓力測試、跨國專案、行動支付串接、報表自動化、微服務拆分
+peers = 卷王 Kevin、馬屁精 Jason、天才新人 Amy、加班狂 Leo、簡報大師 Vivian、斜槓 Eric、開會王 Tina、摸魚仙人 Ben
+goals = 用戶成長、月營收目標、產品上線、團隊擴編、海外市場、用戶留存、付費轉換、App 排行榜
+vcs = 紅杉影子資本、台北天使俱樂部、巨鷹創投、矽島基金、Formosa Ventures、未來之星加速器
+weiya_items = iPhone、Switch、電競椅、氣炸鍋、無線吸塵器、PS5
+inc_oncall = 🔥 半夜 on-call
+inc_scope = 📝 需求又改了
+inc_boss = 👔 主管換人
+inc_sick = 🤧 隊友請病假
+inc_helper = 🦸 神隊友支援
+inc_ai = 🤖 AI 幫大忙
+stage_projects = 季度專案
+stage_peers = 同期 KPI 排行
+stage_defense = 升遷答辯：{職位}
+stage_board = 董事會投票：執行長
+stage_weiya = 尾牙抽獎
+stage_quarters = 季度成長目標
+stage_roadshow = 募資路演：{階段}
+note_kpi = KPI {KPI}／12，年度考績 {考績}
+note_top = 🥇 同期第一！升遷點數 +1
+note_place = 同期第 {名次} 名
+def_tech = 技術面試
+def_tech_opp = 資深架構師
+def_boss = 主管面談
+def_boss_opp = 部門主管
+def_exec = 高層簡報
+def_exec_opp = 高層主管們
+note_def_ok = 🎉 答辯通過，升任「{職位}」！
+note_def_fail = 答辯沒有通過……升遷點數減半。
+board_round = 董事
+board_opp = 7 席董事
+board_opp_hu = 7 席董事（胡投顧是股東之一）
+note_board_ok = 🎉 贊成 {贊成} 票、反對 {反對} 票，當選執行長！
+note_board_fail = 贊成 {贊成} 票、反對 {反對} 票，董事會選擇了外部空降的人選。
+weiya_grand = 🎉 抽中頭獎！{獎金}，全場尖叫！
+weiya_second = 🎁 抽中二獎：{獎品}（{獎金}）
+weiya_small = 抽到參加獎：一包衛生紙。明年再來。
+note_q_up = {達標}／4 季達標，準備募資！
+note_q_hold = {達標}／4 季達標，進展有限。
+note_q_bad = 一季都沒達標……
+vc_round = 創投
+note_vc_ok = 🤝 拿到投資意向書，成功進入「{階段}」！
+note_vc_fail = 沒有創投願意投資，募資失敗……
+msg_def_fail = 升遷答辯沒有通過，升遷點數減半。
+msg_board_fail = 董事會這次選擇了外部空降的執行長……再接再厲。
+
+# 專屬變數：{同事}
+[event.office_peer]
+icon = 😤
+title = 同期升官了
+text = 公告欄上貼出了升遷名單，{同事} 的名字排在第一個。
+choice1 = 大方恭喜他
+result1 = {同事} 請大家喝飲料，你也拿了一杯。人脈比面子重要。
+choice2 = 明年一定要贏回來
+result2 = 你默默把工作排得更滿。
+
+
+# ============================================================
+#  理財（v1.2）
+# ============================================================
+
+[finance]
+style_frugal = 🍜 小資
+style_frugal_desc = 每年 12 萬，心情 -1
+style_comfy = 🏠 舒適
+style_comfy_desc = 每年 36 萬
+style_lux = 🥂 奢華
+style_lux_desc = 每年 150 萬，心情 +3
+style_royal = 👑 頂級
+style_royal_desc = 每年 600 萬，心情 +5
+style_hint = 出社會後每年要付生活費。職業選手住戰隊宿舍，費用減半；有自己的房子不用付房租，費用 -40%。降低生活水準後，2 年內每年心情 -4（由奢入儉難）。
+inv_deposit = 🏦 定存
+inv_deposit_desc = 年報酬 1.5%，穩穩的
+inv_etf = 📊 指數 ETF
+inv_etf_desc = 平均年報酬 7%，偶爾會跌
+inv_stock = 📈 個股
+inv_stock_desc = 平均年報酬 8%，大起大落
+inv_crypto = 🪙 加密貨幣
+inv_crypto_desc = 平均年報酬 12%，可能一年腰斬
+inv_hu = 💹 胡投顧代操
+inv_hu_desc = 平均年報酬 12%，風險適中（胡投顧好友度 60 以上）
+inv_hint = 投資的錢每年結算時漲跌，可以隨時贖回。結局時會自動換成現金。
+line_income = 職涯收入
+line_tax = 所得稅
+line_living = 生活費
+line_upkeep = 維護費
+line_staff_chef = 私廚阿方
+line_staff_guard = 保全 Corey
+line_loan_house = 房貸
+line_loan_shark = 地下錢莊
+line_interest = 負債利息
+line_invest = 投資損益
+shark_btn = 🦈 地下錢莊借 50 萬
+shark_desc = 借 50 萬，之後 3 年每年要還 30 萬
+shark_log = 向地下錢莊借了 50 萬……
+msg_debt = 負債中！利息 15%、生活壓力更大。（已連續 {年數} 年，{上限} 年就會破產）
+msg_bankrupt = 債務越滾越大，再也還不出來了……只能宣告破產。
+debt_status = 💳 負債中（{年數}/{上限} 年）
+
+[event.debt_collect]
+icon = ☎️
+title = 催收電話
+text = 銀行的催收電話一天打來八次。帳戶已經是負數了，得想想辦法……
+choice1 = 賣掉超跑
+result1 = 看著超跑被開走，心在淌血。
+choice2 = 賣掉房子
+result2 = 賣房還清房貸，又搬回了租屋處。
+choice3 = 賣掉豪宅
+result3 = 豪宅易主。那些派對的回憶，就留在那裡吧。
+choice4 = 向胡投顧借錢
+result4 = 胡投顧二話不說幫你還清了：「慢慢還，不急。」但你知道，這份人情很重。
+choice5 = 找哈基咩問更生
+result5 = 哈基咩在市政府上班，幫你查好了更生程序。債務砍半，但名聲受了點影響。
+choice6 = 硬撐下去
+result6 = 你把電話設成靜音，但壓力一點也沒有變小。
+
+[ending.bankrupt]
+icon = 💸
+name = 破產
+text = 法院的裁定書寄來那天，{名字} 坐在空蕩蕩的租屋處裡。存款、信用、那些曾經揮霍的日子，全都沒了。手機響起，是開黑群組：「今晚打嗎？」他愣了很久，回了一個字：「打。」
+
+
+# ============================================================
+#  其他（v1.2）
+# ============================================================
+
+[action.squad]
+icon = 🎮
+name = 揪團開黑
+desc = 和開黑的朋友們一起打遊戲，所有開黑朋友好友度上升（人緣越高漲越多）。
+
+[item.house]
+icon = 🏡
+name = 買房
+desc = 總價 1,500 萬，先付頭期款 2 成，其餘 20 年房貸。免房租、生活費 -40%，買下時心情 +10
+
+[achievement.friends_all]
+icon = 🤝
+name = 朋友滿天下
+desc = 認識所有朋友
+
+[achievement.squad6]
+icon = 🎮
+name = 六人開黑
+desc = 和所有開黑朋友一起打到天亮
+
+[achievement.rival_slayer]
+icon = 🔥
+name = 宿敵終結者
+desc = 在聯賽決賽擊敗王選手
+
+[achievement.rival_friends]
+icon = 🫂
+name = 亦敵亦友
+desc = 和王選手在賽場上交手 15 次
+
+[achievement.office_top]
+icon = 👑
+name = 卷王之王
+desc = 拿到 3 次同期第一
+
+[achievement.weiya]
+icon = 🧧
+name = 尾牙頭獎
+desc = 在尾牙抽中頭獎
+
+[achievement.house]
+icon = 🏡
+name = 有殼族
+desc = 買下自己的房子
+
+[achievement.chef]
+icon = 🍳
+name = 私人廚師
+desc = 請阿方當私人廚師
+
+[achievement.guard]
+icon = 🛡️
+name = 貼身保全
+desc = 請 Corey 當貼身保全
+
+[achievement.taxpayer]
+icon = 🧾
+name = 納稅大戶
+desc = 一生繳稅超過 1,000 萬
+
+[achievement.in_debt]
+icon = 💳
+name = 負債人生
+desc = 存款變成負數
+
+[achievement.hu_win]
+icon = 💹
+name = 明牌之神
+desc = 跟胡投顧的明牌大賺一筆
 `);

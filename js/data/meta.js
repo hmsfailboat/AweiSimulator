@@ -18,6 +18,7 @@
     happy_life: { good: true },
     fire: { good: true },
     burnout: {},
+    bankrupt: {},
   };
 
   AW.ACHIEVEMENTS = [
@@ -45,6 +46,19 @@
     { id: 'happy', check: (s) => s.ending && AW.Engine.lifeAvg(s).mood >= 85 },
     { id: 'iron_man', check: (s) => s.ending && !s.flags.collapsed && AW.Engine.lifeAvg(s).health >= 80 },
     { id: 'ordinary', check: (s) => s.ending && s.ending.id === 'ordinary' },
+    // v1.2
+    { id: 'friends_all', check: (s) => s.npcs && AW.NPC_ORDER.every((id) => s.npcs[id]) },
+    { id: 'squad6', check: (s) => s.flags.squad6 },
+    { id: 'rival_slayer', check: (s) => s.flags.rivalSlayer },
+    { id: 'rival_friends', check: (s) => s.rival && s.rival.w + s.rival.l >= 15 },
+    { id: 'office_top', check: (s) => (s.counters.officeTop || 0) >= 3 },
+    { id: 'weiya', check: (s) => s.flags.weiya },
+    { id: 'house', check: (s) => s.items && s.items.house },
+    { id: 'chef', check: (s) => s.staff && s.staff.chef },
+    { id: 'guard', check: (s) => s.staff && s.staff.guard },
+    { id: 'taxpayer', check: (s) => s.fin && s.fin.taxTotal >= 10000000 },
+    { id: 'in_debt', check: (s) => s.flags.debt },
+    { id: 'hu_win', check: (s) => s.flags.huWin },
     { id: 'all_endings' },
   ];
 

@@ -14,6 +14,8 @@
     items(s) { return s.items || (s.items = {}); },
     owned(s, id) { return !!this.items(s)[id]; },
     price(s, it) { return AW.val(it.price, s); },
+    // 實際要付的錢（房子只付頭期款）
+    cost(s, it) { const p = this.price(s, it); return it.loan ? Math.round(p * it.loan.down) : p; },
 
     state(s, it) {
       if (it.stages && !it.stages.includes(AW.Engine.stageKey(s))) return fail('', true);
@@ -30,7 +32,9 @@
         if (s.step === 'summary') return fail('今年的行動已經結束');
       }
       if ((it.type === 'use' || it.type === 'gift') && s.yearFlags['buy_' + it.id]) return fail('今年已經買過了');
-      const p = this.price(s, it);
+      const lock = it.lock && it.lock(s);
+      if (lock) return fail(lock);
+      const p = this.cost(s, it);
       if (s.stats.money < p) return fail(`需要 ${AW.fmtMoney(p)}`);
       return { ok: true };
     },
@@ -42,16 +46,17 @@
     buy(s, id) {
       const it = AW.ITEM_MAP[id];
       if (!it || !this.open(s) || !this.state(s, it).ok) return null;
-      const p = this.price(s, it);
+      const p = this.cost(s, it);
       const deltas = AW.applyEffects(s, { money: -p });
       s.counters.spent = (s.counters.spent || 0) + p;
+      if (it.loan) AW.Finance.addLoan(s, it.id, this.price(s, it) - p, it.loan.rate, it.loan.years);
       const items = this.items(s);
-      if (it.type === 'gear') items[it.id] = 1;
+      if (it.type === 'gear') { items[it.id] = 1; s.itemSince[it.id] = s.age; }
       else if (it.type === 'charm') items.charm = (items.charm || 0) + 1;
       else if (it.type === 'slot') s.yearFlags.extraSlot = 1;
       else s.yearFlags['buy_' + it.id] = 1;
       if (it.cure) { delete s.flags[it.cure]; s.counters.lowHealth = 0; }
-      if (it.effects) AW.mergeDeltas(deltas, AW.applyEffects(s, it.effects));
+      if (it.effects) AW.mergeDeltas(deltas, AW.applyEffects(s, this.scaled(it.effects, this.tolerance(s, it))));
       AW.Engine.addLog(s, it.icon, `購買「${it.name}」（${AW.fmtMoney(p)}）`);
       AW.Engine.checkVitals(s, true);
       AW.Engine.checkAchievements(s);
@@ -70,10 +75,50 @@
       return v;
     },
 
+    // 耐受性：連續每年購買，效果遞減
+    tolerance(s, it) {
+      if (!it.tolerance) return 1;
+      const last = s.itemUse[it.id];
+      const n = last && last.age === s.age - 1 ? last.n + 1 : 0;
+      s.itemUse[it.id] = { age: s.age, n };
+      return Math.pow(it.tolerance, n);
+    },
+    scaled(eff, k) {
+      if (k === 1) return eff;
+      const out = {};
+      for (const key of Object.keys(eff)) out[key] = eff[key] * k;
+      return out;
+    },
+    // 享樂適應：每年效果減半，太小就沒感覺了
+    adaptMult(s, it) {
+      if (!it.adapt) return 1;
+      const since = s.itemSince[it.id] != null ? s.itemSince[it.id] : s.age;
+      const k = Math.pow(0.5, Math.max(0, s.age - since));
+      return k < 0.2 ? 0 : k;
+    },
+
+    // 變賣：拿回部分價錢，房子要先還清房貸
+    sellValue(s, id) {
+      const it = AW.ITEM_MAP[id];
+      if (!it || !it.sell || !this.owned(s, id)) return 0;
+      return Math.round(this.price(s, it) * it.sell - (it.loan ? AW.Finance.loanLeft(s, id) : 0));
+    },
+    sell(s, id) {
+      const it = AW.ITEM_MAP[id];
+      if (!it || !this.owned(s, id)) return {};
+      const v = this.sellValue(s, id);
+      delete this.items(s)[id];
+      if (it.loan) AW.Finance.dropLoans(s, id);
+      AW.NPC.checkStaff(s);
+      return AW.applyEffects(s, { money: v });
+    },
+
     yearEnd(s) {
       for (const id of Object.keys(s.items || {})) {
         const it = AW.ITEM_MAP[id];
-        if (it && it.type === 'gear' && it.yearly) AW.applyEffects(s, it.yearly);
+        if (!it || it.type !== 'gear' || !it.yearly) continue;
+        const k = this.adaptMult(s, it);
+        if (k) AW.applyEffects(s, this.scaled(it.yearly, k));
       }
     },
   });

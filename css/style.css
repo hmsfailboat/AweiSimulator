@@ -234,7 +234,7 @@ em.down { color: var(--bad); }
 .stage { margin: .8em 0; }
 .stage-name { font-weight: 700; margin-bottom: .35em; }
 .match {
-  display: grid; grid-template-columns: 4.2em minmax(0, 1fr) 3em auto 3.6em; align-items: center; gap: .5em;
+  display: grid; grid-template-columns: 4.2em minmax(0, 1fr) 3em auto minmax(3.6em, auto); align-items: center; gap: .5em;
   padding: .35em .6em; border-radius: 8px; background: var(--card2); margin-bottom: .3em; font-size: .88rem; border-left: 3px solid var(--line);
   animation: pop .2s ease;
 }
@@ -245,7 +245,7 @@ em.down { color: var(--bad); }
 .m-opp { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-prob { color: var(--muted); font-size: .8rem; text-align: right; }
 .m-games { letter-spacing: -.1em; font-size: .75rem; }
-.m-res { font-weight: 700; text-align: right; }
+.m-res { font-weight: 700; text-align: right; white-space: nowrap; }
 .match.won .m-res { color: var(--ok); }
 .match.lost .m-res { color: var(--bad); }
 .stage-note { font-weight: 700; padding: .25em .6em; }
@@ -385,3 +385,32 @@ em.down { color: var(--bad); }
   .alloc-row { grid-template-columns: 1fr auto auto auto 2em; gap: .35em; }
   .pips i { width: 11px; height: 11px; }
 }
+
+/* ---------- v1.2：朋友、理財、職場聯賽 ---------- */
+.shop-btns { display: grid; grid-template-columns: 1fr 1fr; }
+.money.debt { color: var(--bad); }
+.friends-box { display: flex; flex-wrap: wrap; gap: .3em; margin: .5em 0 .2em; cursor: pointer; }
+.f-chip { position: relative; display: inline-grid; place-items: center; width: 2em; height: 2em; border-radius: 8px; background: var(--card2); border: 1px solid var(--line); overflow: hidden; font-size: 1.05rem; }
+.f-chip i { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ok); }
+.f-chip.close { border-color: #1f6b52; }
+.f-chip.far { opacity: .55; }
+.npc-card { display: flex; gap: .8em; padding: .7em 0; border-bottom: 1px solid var(--line); }
+.npc-card:last-child { border-bottom: 0; }
+.npc-card .stat { margin: .3em 0; }
+.npc-card .row { margin-top: .5em; }
+.ledger { background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: .45em .8em; margin: .6em 0; font-size: .88rem; }
+.ledger summary { cursor: pointer; }
+.ledger .c-row b { font-variant-numeric: tabular-nums; }
+.tabs.styles { flex-wrap: wrap; }
+.tabs.styles .tab { display: flex; flex-direction: column; min-width: 7em; }
+.tabs.styles .tab small { font-size: .72rem; }
+.tab:disabled { opacity: .5; cursor: not-allowed; }
+.bets.left { justify-content: flex-start; margin-top: .3em; }
+.inv-val { display: flex; flex-direction: column; align-items: flex-end; gap: .3em; }
+.gold { color: var(--gold); }
+.match.rival { background: #2a1520; border-left-color: var(--accent2); }
+.match.rival.won { border-left-color: var(--ok); }
+.match.rival.lost { border-left-color: var(--bad); }
+.m-tag { color: var(--warn); font-size: .72rem; }
+.peer-table { background: var(--card2); border-radius: 8px; padding: .3em .7em; font-size: .86rem; }
+.peer-table .me { color: var(--accent); font-weight: 700; }
