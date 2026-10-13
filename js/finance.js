@@ -39,7 +39,7 @@
     // 出社會後才有生活費、稅金（大學生由家裡支付）
     active(s) {
       if (s.age < 18) return false;
-      if (s.phase === 'esports') return true;
+      if (s.phase === 'esports' || s.phase === 'second') return true;
       return s.phase === 'engineer' && s.eng.stage !== 'uni';
     },
     canManage(s) { return s.age >= 18 && s.phase !== 'ended'; },
@@ -71,6 +71,7 @@
       let c = STYLES[s.fin.style].cost;
       if (s.phase === 'esports') c *= 0.5; // 戰隊宿舍
       if (this.hasHome(s)) c *= 0.6;        // 不用付房租
+      c += AW.Family.upkeep(s);              // 孩子的養育費
       return Math.round(c);
     },
 
@@ -170,6 +171,9 @@
         const tax = this.tax(f.income);
         if (tax) { pay('tax', tax); f.taxTotal += tax; }
         pay('living', this.livingCost(s));
+        // 婚後雙薪
+        const partner = AW.Love.partnerIncome(s);
+        if (partner) { AW.applyEffects(s, { money: partner }); y.lines.push({ key: 'partner', v: partner }); }
         let mood = STYLES[f.style].mood;
         if (f.down > 0) { mood += DOWN_MOOD; f.down -= 1; }
         if (mood) AW.applyEffects(s, { mood });
@@ -195,6 +199,22 @@
       }
       f.loans = f.loans.filter((l) => l.left > 0);
 
+      // 現金不夠時，自動贖回投資補足（先賣報酬最穩的）
+      if (s.stats.money < 0 && this.invested(s)) {
+        let need = -s.stats.money;
+        let sold = 0;
+        for (const id of Object.keys(PRODUCTS)) {
+          const v = f.inv[id] || 0;
+          if (!v || need <= 0) continue;
+          const take = Math.min(v, need);
+          f.inv[id] = v - take;
+          if (!f.inv[id]) delete f.inv[id];
+          need -= take;
+          sold += take;
+        }
+        AW.applyEffects(s, { money: sold });
+        AW.Engine.note(s, '💵', AW.tx('finance', 'msg_auto_sell', s, { 金額: AW.fmtMoney(sold) }));
+      }
       // 負債：利息、壓力、破產
       if (s.stats.money < 0) {
         pay('interest', -s.stats.money * DEBT.rate);
@@ -216,7 +236,7 @@
 
     // 每年固定開銷（生活費、維護費、雇員、貸款），用來判斷財富自由
     yearlySpend(s) {
-      let v = STYLES[s.fin.style].cost * (this.hasHome(s) ? 0.6 : 1);
+      let v = STYLES[s.fin.style].cost * (this.hasHome(s) ? 0.6 : 1) + AW.Family.upkeep(s);
       for (const id of Object.keys(s.items || {})) { const it = AW.ITEM_MAP[id]; if (it && it.upkeep) v += it.upkeep; }
       for (const id of Object.keys(s.staff || {})) v += AW.STAFF[id].salary;
       for (const l of s.fin.loans) v += l.pay;

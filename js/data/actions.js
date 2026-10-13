@@ -1,6 +1,7 @@
 /* 行動：每年從中選擇 N 個
  * stages: infant(0-5) elem(6-11) junior(12-14) senior(15-17) extra(延長賽)
  *         pro(電競) uni(大學) job(上班) startup(創業)
+ *         第二幕：streamer(實況主) coach(教練) biz(創業從商) chairman(董事長) retired(退休) elder(65 歲後)
  * tags: game → 被「禁止打電動」時不可選；hideLocked: 條件不符時直接隱藏（不顯示鎖頭）
  * perf: 工程師年度績效加成；sp: 創業衝刺點數
  * cost: 金錢花費（數字或 (s) => 數字）；income: 職涯收入（會計入所得稅）
@@ -12,7 +13,12 @@
   const AW = root.AW;
   const STUDENT = ['elem', 'junior', 'senior'];
   const TEEN = ['junior', 'senior'];
-  const LOVE = TEEN.concat('extra', 'pro', 'uni', 'job', 'startup');
+  const JOBS2 = ['streamer', 'coach', 'biz', 'chairman'];
+  const SECOND = JOBS2.concat('retired');
+  const WORK = ['pro', 'job', 'startup'].concat(SECOND);
+  const LOVE = TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', 'elder', SECOND);
+  const OLD = ['retired', 'elder'];
+  const hasKids = (s) => s.kids.length > 0;
 
   AW.ACTIONS = [
     // ---------------- 嬰幼兒 ----------------
@@ -92,10 +98,10 @@
       effects: { main: 4, teamwork: 4, mood: -2 } },
     { id: 'stream', stages: ['pro'], income: (s) => 30000 + s.stats.fame * 3000,
       effects: { fame: 6, mood: 3, main: 1 } },
-    { id: 'gym', stages: ['pro', 'job', 'startup'],
+    { id: 'gym', stages: WORK,
       effects: { health: 12, mood: 2 },
       run(s) { s.yearFlags.gym = 1; return { text: AW.tx('action.gym', 'msg', s), deltas: {} }; } },
-    { id: 'pro_rest', stages: ['pro'],
+    { id: 'pro_rest', stages: ['pro', 'streamer', 'coach'],
       effects: { health: 10, mood: 15 } },
     { id: 'endorse', stages: ['pro'],
       cond: (s) => s.stats.fame >= 40, income: (s) => s.stats.fame * 15000,
@@ -128,7 +134,7 @@
       effects: { leader: 6, social: 2, mood: -1 } },
     { id: 'crossteam', stages: ['job'], perf: 1,
       effects: { social: 5, leader: 3, mood: -2 } },
-    { id: 'networking', stages: ['job', 'startup'], cost: 20000,
+    { id: 'networking', stages: ['job', 'startup', 'biz', 'chairman'], cost: 20000,
       effects: { social: 7, leader: 2, health: -5 } },
     { id: 'overtime', stages: ['job'], perf: 4,
       effects: { tech: 2, health: -12, mood: -8 } },
@@ -141,14 +147,14 @@
         }
         return { text: '', deltas: {} };
       } },
-    { id: 'vacation', stages: ['job', 'startup'], cost: 50000,
+    { id: 'vacation', stages: ['job', 'startup'].concat(JOBS2), cost: 50000,
       effects: { health: 14, mood: 15 } },
     { id: 'quit_startup', stages: ['job'],
       cond: (s) => s.eng.rank >= 2 && s.stats.money >= 3000000 && (s.flags.founded || 0) < 2,
       run(s) { return AW.Engineer.startStartup(s); } },
 
     // ---------------- 朋友（認識開黑朋友後） ----------------
-    { id: 'squad', stages: ['elem', 'junior', 'senior', 'extra', 'pro', 'uni', 'job', 'startup'], tags: ['game'],
+    { id: 'squad', stages: ['elem', 'junior', 'senior', 'extra', 'pro', 'uni', 'job', 'startup'].concat(SECOND), tags: ['game'],
       cond: (s) => AW.NPC.gamers(s).length > 0, hideLocked: true,
       effects: { mood: 8, best: 2, social: 2, health: -2 },
       run(s) { return { text: '', deltas: {}, bonds: AW.NPC.squad(s) }; } },
@@ -157,6 +163,82 @@
     { id: 'date', stages: LOVE, cond: (s) => AW.Love.active(s), hideLocked: true,
       cost: (s) => (s.age < 18 ? 500 : s.age < 23 ? 3000 : 10000),
       effects: { love: 15, mood: 8, social: 2 } },
+
+    // ---------------- 朋友：胡投顧 ----------------
+    { id: 'hu_chat', stages: ['extra', 'pro', 'uni', 'job', 'startup'].concat(SECOND, 'elder'), hideLocked: true,
+      cond: (s) => s.age >= 18 && AW.NPC.met(s, 'hu'),
+      effects: { mood: 3, study: 1, social: 1 },
+      run(s) {
+        const v = AW.NPC.addBond(s, 'hu', AW.NPC_BOND.chat * (1 + s.stats.social / 200));
+        return { text: AW.tx('action.hu_chat', 'msg', s), bonds: v ? [{ id: 'hu', v }] : [] };
+      } },
+
+    // ---------------- 感情、家庭（v2.0） ----------------
+    { id: 'date_fling', stages: LOVE, cond: (s) => s.flings.length > 0, hideLocked: true,
+      cost: (s) => (s.age < 23 ? 3000 : 10000) * s.flings.length,
+      effects: { mood: 6, health: -2 }, run: (s) => AW.Love.dateFlings(s) },
+    { id: 'family_time', stages: WORK.concat('elder'), cond: hasKids, hideLocked: true,
+      effects: { mood: 8, love: 6, health: 2 }, run(s) { AW.Family.playWithKids(s); return { text: '' }; } },
+
+    // ---------------- 實況主（v2.0） ----------------
+    { id: 'sm_live', stages: ['streamer'], sp: 2, income: (s) => s.second.subs * 0.3,
+      effects: { fame: 2, mood: -2, health: -2 } },
+    { id: 'sm_video', stages: ['streamer'], sp: 3,
+      effects: { fame: 3, mood: -4, health: -3 } },
+    { id: 'sm_collab', stages: ['streamer'], sp: 2, cond: (s) => AW.NPC.gamers(s).length > 0, hideLocked: true,
+      effects: { mood: 6, social: 2 },
+      run(s) {
+        const id = AW.pick(AW.NPC.gamers(s));
+        return { text: AW.tx('action.sm_collab', 'msg', s, { 朋友: AW.NPC.name(id) }), bonds: [{ id, v: AW.NPC.addBond(s, id, 8) }] };
+      } },
+    { id: 'sm_sponsor', stages: ['streamer'], sp: -1, income: (s) => s.stats.fame * 20000,
+      effects: { fame: -1, mood: -2 } },
+
+    // ---------------- 電競教練（v2.0） ----------------
+    { id: 'co_tactics', stages: ['coach'], effects: { tactics: 6, mood: -2 } },
+    { id: 'co_train', stages: ['coach'], effects: { teamwork: 2, health: -2 },
+      run(s) { s.second.bonus += 3; return { text: AW.tx('action.co_train', 'msg', s) }; } },
+    { id: 'co_scout', stages: ['coach'], cost: (s) => 1000000 * (s.second.tier + 1),
+      run(s) { s.second.bonus += 5; return { text: AW.tx('action.co_scout', 'msg', s) }; } },
+    { id: 'co_mental', stages: ['coach'], effects: { mood: 8, social: 2 },
+      run(s) { s.second.bonus += 1; return { text: '' }; } },
+
+    // ---------------- 創業從商（v2.0） ----------------
+    { id: 'bz_store', stages: ['biz'], sp: 2, effects: { leader: 2, health: -4 } },
+    { id: 'bz_market', stages: ['biz'], sp: 2, cost: 300000, effects: { social: 4, fame: 2, mood: -2 } },
+    { id: 'bz_hire', stages: ['biz', 'chairman'], sp: 2, effects: { leader: 5, social: 2 } },
+    { id: 'bz_crunch', stages: ['biz', 'chairman'], sp: 4, effects: { health: -12, mood: -8 } },
+
+    // ---------------- 董事長（v2.0） ----------------
+    { id: 'ch_strategy', stages: ['chairman'], sp: 2, effects: { leader: 3, mood: -2 } },
+    { id: 'ch_rnd', stages: ['chairman'], sp: 3, cost: 10000000, effects: { tech: 3 } },
+    { id: 'ch_team', stages: ['chairman'], cost: 200000000, cond: (s) => !s.flags.ownTeam, hideLocked: true,
+      effects: { fame: 10, mood: 15 }, run(s) { s.flags.ownTeam = 1; return { text: AW.tx('action.ch_team', 'msg', s) }; } },
+
+    // ---------------- 退休、晚年（v2.0） ----------------
+    { id: 'switch_job', stages: SECOND, cond: (s) => s.age < AW.Second.ELDER_AGE,
+      run: (s) => AW.Second.switchJob(s) },
+    { id: 'travel', stages: OLD, cost: 500000, effects: { mood: 14, health: 2 },
+      run(s) { if (s.age >= 60) s.counters.travelOld = (s.counters.travelOld || 0) + 1; return { text: '' }; } },
+    { id: 'fishing', stages: OLD, effects: { mood: 8, health: 3 },
+      run(s) {
+        if (AW.chance(0.15)) { s.flags.bigFish = 1; return { text: AW.tx('action.fishing', 'msg_big', s) }; }
+        return { text: '' };
+      } },
+    { id: 'elder_squad', stages: OLD, tags: ['game'], cond: (s) => AW.NPC.gamers(s).length > 0, hideLocked: true,
+      effects: { mood: 10, best: 1 }, run(s) { return { text: '', deltas: {}, bonds: AW.NPC.squad(s) }; } },
+    { id: 'charity', stages: OLD.concat('biz', 'chairman'), cond: (s) => s.stats.money >= 1000000,
+      run(s) {
+        const amt = Math.max(1000000, Math.round(s.stats.money * 0.1 / 10000) * 10000);
+        s.counters.donated = (s.counters.donated || 0) + amt;
+        const d = AW.applyEffects(s, { money: -amt, fame: 3, mood: 6 });
+        return { text: AW.tx('action.charity', 'msg', s, { 金額: AW.fmtMoney(amt) }), deltas: d };
+      } },
+    { id: 'walk', stages: OLD, effects: { health: 7, mood: 3 } },
+    { id: 'memoir', stages: OLD, effects: { mood: 6, study: 2 },
+      run(s) { s.counters.memoir = (s.counters.memoir || 0) + 1; return { text: '' }; } },
+    { id: 'checkup', stages: OLD, cost: 200000, effects: { health: 8 },
+      run(s) { s.yearFlags.checkup = 1; return { text: AW.tx('action.checkup', 'msg', s) }; } },
 
     // ---------------- 創業 ----------------
     { id: 'st_product', stages: ['startup'], sp: 2,

@@ -206,7 +206,8 @@
 
     avatar(s) {
       if (s.phase === 'student' && s.age >= 18 && !s.flags.extraYear) return '🧑‍🎓';
-      return { infant: '👶', elem: '🧒', junior: '👦', senior: '🧑', extra: '😤', pro: '😎', uni: '🧑‍🎓', job: '🧑‍💻', startup: '🧑‍💼' }[E.stageKey(s)];
+      return { infant: '👶', elem: '🧒', junior: '👦', senior: '🧑', extra: '😤', pro: '😎', uni: '🧑‍🎓', job: '🧑‍💻', startup: '🧑‍💼',
+        streamer: '🧑‍🎤', coach: '🧑‍🏫', biz: '🧑‍💼', chairman: '🤵', retired: '😌', elder: '👴' }[E.stageKey(s)];
     },
 
     bar(s, k, opts) {
@@ -235,6 +236,17 @@
         skills = [this.bar(s, 'tech', { cls: 'hl' }), this.bar(s, 'leader'), this.bar(s, 'social'), this.bar(s, 'study'),
           this.bar(s, AW.resolveKey(s, 'best'), { cls: 'dim' })];
         if (s.stats.fame) skills.push(this.bar(s, 'fame', { cls: 'dim' }));
+      } else if (s.phase === 'second') {
+        const best = AW.resolveKey(s, 'best');
+        const keys = {
+          streamer: [['fame', 'hl'], ['social'], [best, 'dim']],
+          coach: [['tactics', 'hl'], [s.esports ? s.esports.game : best], ['teamwork'], ['fame', 'dim']],
+          biz: [['leader', 'hl'], ['social'], [AW.Second.THEMES[s.second.theme || 'consult'].stat]],
+          chairman: [['leader', 'hl'], ['tech'], ['social']],
+          retired: [['social'], ['study'], [best, 'dim']],
+          elder: [['social'], ['study'], [best, 'dim']],
+        }[E.stageKey(s)] || [['social']];
+        skills = keys.map(([k, cls]) => this.bar(s, k, { cls }));
       } else {
         skills = AW.BIRTH_STATS.map((k) => this.bar(s, k));
       }
@@ -251,7 +263,9 @@
         <div class="group conds"><div class="g-title">狀態</div>${this.bar(s, 'health')}${this.bar(s, 'mood')}</div>
         ${this.rStatus(s)}
         ${this.rLoveBox(s)}
+        ${this.rFamilyBox(s)}
         ${this.rFriendsBox(s)}
+        ${this.rWishes(s)}
         <div class="money ${money < 0 ? 'debt' : ''}">💰 ${AW.fmtMoney(money)} ${money !== pm ? `<em class="${money > pm ? 'up' : 'down'}">${money > pm ? '+' : ''}${AW.fmtMoney(money - pm)}</em>` : ''}</div>
         ${AW.Finance.invested(s) ? `<div class="muted small">📈 投資中 ${AW.fmtMoney(AW.Finance.invested(s))}</div>` : ''}
         ${this.rShopBtns(s)}
@@ -261,13 +275,27 @@
     rStatus(s) {
       const list = AW.statusList(s);
       if (!list.length) return '';
-      const bad = { tired: 1, frail: 1, low: 1, depressed: 1, chronic: 1 };
+      const bad = { tired: 1, frail: 1, low: 1, depressed: 1, chronic: 1, cold: 1 };
       return `<div class="status-tags">${list.map((id) => `<span class="pill ${bad[id] ? 'bad' : 'ok'}" title="${esc(AW.tx('status', id + '_desc', s))}">${esc(AW.tx('status', id + '_name', s))}</span>`).join('')}</div>`;
     },
 
     rLoveBox(s) {
       if (!AW.Love.active(s)) return '';
-      return `<div class="love-box"><div class="c-row"><span>💕 ${esc(s.love.name)}</span><span class="muted">${esc(AW.Love.statusName(s))}</span></div>${this.bar(s, 'love')}</div>`;
+      const flings = (s.flings || []).map((f) => `<div class="c-row small"><span>💌 ${esc(f.name)}</span><span class="muted">偷偷交往中・好感 ${Math.round(f.love)}</span></div>`).join('');
+      const type = s.love.type ? `<span class="pill love-type" title="${esc(AW.tx('love', 'type_' + s.love.type + '_desc', s))}">${esc(AW.Love.typeName(s))}</span>` : '';
+      return `<div class="love-box"><div class="c-row"><span>💕 ${esc(s.love.name)} ${type}</span><span class="muted">${esc(AW.Love.statusName(s))}</span></div>${this.bar(s, 'love')}${flings}</div>`;
+    },
+    // 子女與孫子
+    rFamilyBox(s) {
+      if (!s.kids || !s.kids.length) return '';
+      const kids = s.kids.map((k) => `<span class="pill" title="${k.pro ? '職業選手' : k.married ? '已婚' : ''}">${k.pro ? '🎮' : '🧒'} ${esc(k.name)} ${AW.Family.age(s, k)} 歲</span>`).join('');
+      return `<div class="family-box">${kids}${s.grandkids ? `<span class="pill">🧸 孫子 ×${s.grandkids}</span>` : ''}</div>`;
+    },
+    // 遺願清單
+    rWishes(s) {
+      if (!s.wishes || !s.wishes.length) return '';
+      return `<details class="wishes"><summary>📝 遺願清單 ${s.wishes.filter((w) => w.done).length}/${s.wishes.length}</summary>${s.wishes.map((w) =>
+        `<div class="c-row small ${w.done ? 'ok' : ''}"><span>${w.done ? '✅' : '⬜'} ${esc(AW.tx('wish.' + w.id, 'name', s))}</span><span class="muted">${esc(AW.tx('wish.' + w.id, 'desc', s))}</span></div>`).join('')}</details>`;
     },
 
     rShopBtns(s) {
@@ -327,7 +355,36 @@
           <div class="bar thin"><div class="fill k-leader" style="width:${Math.min(100, e.promo / need * 100)}%"></div></div>` : ''}
         </div>`;
       }
+      if (s.phase === 'second') return this.rSecondBox(s);
       return '';
+    },
+
+    rSecondBox(s) {
+      const g = s.second;
+      const S = AW.Second;
+      const turn = S.turnYears(s) > 1 ? `<div class="c-row muted small"><span>⏩ 每回合 ${S.turnYears(s)} 年</span><span>${s.age >= S.ELDER_AGE ? '每年 1 個行動' : ''}</span></div>` : '';
+      if (s.age >= S.ELDER_AGE || g.job === 'retired') {
+        return `<div class="career"><div class="c-row"><span>${s.age >= S.ELDER_AGE ? '🧓 晚年生活' : '🎣 退休生活'}</span><span class="muted">${g.was ? `前${esc(AW.tx('second', 'job_' + g.was, s))}` : ''}</span></div>${turn}</div>`;
+      }
+      if (g.job === 'streamer') {
+        return `<div class="career"><div class="c-row"><span>📺 訂閱 <b>${esc(S.fmtSubs(g.subs))}</b></span><span class="muted">${g.place ? `年度第 ${g.place}` : ''}</span></div>
+          <div class="bar thin"><div class="fill k-fame" style="width:${Math.min(100, g.subs / 10000)}%"></div></div>
+          <div class="c-row muted small"><span>目標：百萬訂閱</span><span>最高 ${esc(S.fmtSubs(g.peak || g.subs))}</span></div>${turn}</div>`;
+      }
+      if (g.job === 'coach') {
+        const T = AW.Esports.TIERS[g.tier];
+        return `<div class="career"><div class="c-row"><span>${T.icon} ${esc(g.team)}</span><span class="muted">${T.name}</span></div>
+          <div class="c-row"><span>隊伍戰力 <b>${Math.round(S.coachPower(s))}</b></span><span>選手加成 ${g.bonus >= 0 ? '+' : ''}${g.bonus}</span></div>
+          <div class="c-row"><span>🥇 ×${g.titles}　🏆 ×${g.worldTitles}</span><span class="muted">目標：冠軍教練</span></div>${turn}</div>`;
+      }
+      const chair = g.job === 'chairman';
+      const ST = chair ? S.CHAIR_STAGES : S.BIZ_STAGES;
+      const key = chair ? 'chair_stage_' : 'biz_stage_';
+      const track = ST.map((x, i) => `<span class="${i < g.stage ? 'done' : i === g.stage ? 'cur' : ''}" title="${esc(AW.tx('second', key + i, s))}">${x.icon}</span>`).join('<i>›</i>');
+      return `<div class="career"><div class="c-row"><span>${chair ? '👑' : '🏪'} ${esc(g.name)}</span><span class="muted">${esc(AW.tx('second', key + g.stage, s))}</span></div>
+        <div class="track">${track}</div>
+        ${chair ? `<div class="c-row"><span>董事會信任</span><span>${g.bad ? '⚠️ 不滿 ' + g.bad + '/2' : '👍 穩定'}</span></div>`
+          : `<div class="c-row"><span>資金跑道 ${'🔋'.repeat(Math.max(0, g.runway))}${'🪫'.repeat(Math.max(0, 3 - g.runway))}</span>${g.partner ? `<span class="muted">合夥：${esc(AW.NPC.name(g.partner))}</span>` : ''}</div>`}${turn}</div>`;
     },
 
     rLog(s) {
@@ -342,16 +399,23 @@
     },
 
     // 這一年有沒有賽季動畫（電競賽季、職場賽季、創業之年）
-    hasSeason(s) { return s.phase === 'esports' || (s.phase === 'engineer' && s.eng.stage !== 'uni'); },
+    hasSeason(s) { return s.phase === 'esports' || (s.phase === 'engineer' && s.eng.stage !== 'uni') || AW.Second.hasSeason(s); },
+    seasonLabel(s) {
+      if (s.phase === 'esports') return '賽季';
+      if (s.phase === 'engineer') return s.eng.stage === 'startup' ? '創業之年' : '職場賽季';
+      return { streamer: '直播之年', coach: '教練賽季', biz: '經營之年', chairman: '董事會' }[s.second.job];
+    },
     stepper(s) {
       const steps = s.phase === 'esports' ? ['事件', '訓練', '賽季', '結算']
-        : this.hasSeason(s) ? ['事件', '行動', s.eng.stage === 'startup' ? '創業之年' : '職場賽季', '結算'] : ['事件', '行動', '結算'];
+        : this.hasSeason(s) ? ['事件', '行動', this.seasonLabel(s), '結算'] : ['事件', '行動', '結算'];
       const cur = { event: 0, action: 1, season: 2, summary: steps.length - 1 }[s.step];
       return `<div class="stepper">${steps.map((n, i) => `<span class="${i === cur ? 'cur' : i < cur ? 'done' : ''}">${n}</span>`).join('<i>›</i>')}</div>`;
     },
 
     rMain(s) {
       if (s.step === 'check') return this.rCheck(s);
+      if (s.step === 'chapter') return this.rChapter(s);
+      if (s.step === 'farewell') return this.rFarewell(s);
       if (s.step === 'decision') return `<div class="year-head"><h2>📅 ${s.age} 歲</h2></div>${this.rDecision(s)}`;
       let body = '';
       if (s.step === 'event') body = this.rEvent(s);
@@ -490,7 +554,7 @@
         }
         if (!stageDone) stop = true;
         const table = stageDone && st.table ? `<div class="peer-table">${st.table.map((r, i) =>
-          `<div class="c-row ${r.me ? 'me' : ''}"><span>${i + 1}. ${esc(r.name)}</span><b>KPI ${r.v}</b></div>`).join('')}</div>` : '';
+          `<div class="c-row ${r.me ? 'me' : ''}"><span>${i + 1}. ${esc(r.name)}</span><b>${esc(st.prefix || '')}${esc(r.v)}</b></div>`).join('')}</div>` : '';
         html += `<div class="stage"><div class="stage-name">${st.icon} ${esc(st.name)}</div>${rows}${table}
           ${stageDone ? `<div class="stage-note ${st.neutral ? '' : st.passed ? 'ok' : 'bad'}">${esc(st.note)}</div>` : ''}</div>`;
       }
@@ -535,15 +599,31 @@
         ${review}
         ${notes ? `<div class="notes">${notes}</div>` : ''}
         ${this.rLedger(s)}
+        ${this.rCasinoStats(s, s.yearFlags, '今年賭場')}
         <div class="g-title">今年的變化</div>
         <div class="chips-row">${this.chips(diff) || '<span class="muted">平靜的一年。</span>'}</div>
         ${s.decision ? this.rDecision(s) : ''}
-        <div class="row end">
+        <div class="row end wrap">
           ${E.canFire(s) ? `<button class="btn" data-act="fire">${esc(AW.tx('status', 'fire_button', s))}</button>` : ''}
           ${canRetire ? `<button class="btn ghost" data-act="retire">${s.phase === 'esports' ? '👋 宣布退役' : '🌅 提前退休'}</button>` : ''}
-          <button class="btn primary big" data-act="next-year" ${s.decision ? 'disabled' : ''}>${end ? '🎬 迎接結局 ▶' : '迎接下一年 ▶'}</button>
+          ${s.phase === 'second' && !s.pendingDeath && !end ? `<button class="btn ghost" data-act="curtain">${esc(AW.tx('life', 'curtain_btn', s))}</button>` : ''}
+          <button class="btn primary big" data-act="next-year" ${s.decision ? 'disabled' : ''}>${this.nextLabel(s)}</button>
         </div>
       </section>`;
+    },
+
+    // 賭場戰績：進場次數、贏、輸、淨額（src 是今年的 yearFlags 或一生的 counters）
+    rCasinoStats(s, src, label) {
+      const visits = src.casinoVisits || 0;
+      if (!visits && !(src === s.counters && src.gamblePlays)) return '';
+      const won = src.gambleWon || 0;
+      const lost = src.gambleLost || 0;
+      const net = won - lost;
+      return `<div class="casino-stats"><span>🎰 ${esc(label)}</span>
+        <span>進場 <b>${visits || '—'}</b> 次</span>
+        <span>贏 <b class="ok">+${esc(AW.fmtMoney(won))}</b></span>
+        <span>輸 <b class="bad">-${esc(AW.fmtMoney(lost))}</b></span>
+        <span>淨 <b class="${net >= 0 ? 'ok' : 'bad'}">${net >= 0 ? '+' : ''}${esc(AW.fmtMoney(net))}</b></span></div>`;
     },
 
     // 年度收支表
@@ -559,11 +639,57 @@
       return `<details class="ledger" ${net < 0 ? 'open' : ''}><summary>💰 年度收支：<b class="${net >= 0 ? 'ok' : 'bad'}">${net >= 0 ? '+' : ''}${esc(AW.fmtMoney(net))}</b></summary>${html}</details>`;
     },
 
+    nextLabel(s) {
+      if (s.pendingDeath) return '🕯️ 最後的時光 ▶';
+      if (s.pendingEnding) return '🎬 這一章的結局 ▶';
+      const n = s.phase === 'second' ? AW.Second.turnYears(s) : 1;
+      return n > 1 ? `迎接接下來的 ${n} 年 ▶` : '迎接下一年 ▶';
+    },
+
     rDecision(s) {
       const d = s.decision;
       if (!d) return '';
       return `<div class="decision pop"><h4>${d.icon || '📌'} ${esc(d.title)}</h4><p>${nl(d.text)}</p>
-        <div class="choices">${d.options.map((o, i) => `<button class="btn choice" data-act="decide" data-i="${i}">${esc(o.label)}${o.desc ? `<small>${esc(o.desc)}</small>` : ''}</button>`).join('')}</div></div>`;
+        <div class="choices">${d.options.map((o, i) => `<button class="btn choice" data-act="decide" data-i="${i}" ${o.disabled ? 'disabled' : ''}>${esc(o.label)}${o.desc ? `<small>${esc(o.desc)}</small>` : ''}</button>`).join('')}</div></div>`;
+    },
+
+    // ---------- 章節完成（v2.0） ----------
+    rChapter(s) {
+      const id = s.chapterOffer;
+      const end = AW.ENDINGS[id];
+      const done = s.chapters.map((c) => `<span class="pill">${AW.ENDINGS[c.id].icon} ${esc(AW.ENDINGS[c.id].name)}・${c.age} 歲</span>`).join('');
+      return `<div class="year-head"><h2>🎬 ${s.age} 歲・${esc(AW.tx('life', 'chapter_label', s))}</h2></div>
+      <section class="card ending chapter ${end.good ? 'good' : ''} pop">
+        <div class="end-icon">${end.icon}</div>
+        <div class="end-label">章節</div>
+        <h2>${esc(end.name)}</h2>
+        <p class="end-text">${esc(AW.val(end.text, s))}</p>
+        ${done ? `<div class="chips-row center">${done}</div>` : ''}
+        <p class="muted">${esc(AW.tx('life', 'chapter_hint', s))}</p>
+        <div class="choices">
+          <button class="btn choice" data-act="end-here">${esc(AW.tx('life', 'btn_end', s))}<small>${esc(AW.tx('life', 'btn_end_desc', s))}</small></button>
+          <button class="btn choice primary" data-act="continue-life">${esc(AW.tx('life', 'btn_continue', s))}<small>${esc(AW.tx('life', 'btn_continue_desc', s))}</small></button>
+        </div>
+      </section>`;
+    },
+
+    // ---------- 臨終（v2.0） ----------
+    visitorLines(s, list) {
+      return list.map((v) => {
+        if (v.type === 'love') return `<div class="note"><span>💕</span><span>${esc(AW.tx('life', 'visit_love', s))}</span></div>`;
+        if (v.type === 'kids') return `<div class="note"><span>👨‍👧</span><span>${esc(AW.tx('life', 'visit_kids', s))}</span></div>`;
+        return `<div class="note"><span>${AW.NPC.icon(v.id)}</span><span><b>${esc(AW.NPC.name(v.id))}</b> 來看你了。</span></div>`;
+      }).join('');
+    },
+    rFarewell(s) {
+      const vs = (s.farewell && s.farewell.visitors) || [];
+      return `<div class="year-head"><h2>🕯️ ${s.age} 歲・${esc(AW.tx('life', 'farewell_title', s))}</h2></div>
+      <section class="card farewell pop">
+        <p class="ev-text">${esc(AW.tx('life', vs.length ? 'farewell_text' : 'farewell_alone', s))}</p>
+        <div class="notes">${this.visitorLines(s, vs)}</div>
+        <h4>${esc(AW.tx('life', 'words_title', s))}</h4>
+        <div class="choices">${[1, 2, 3].map((i) => `<button class="btn choice" data-act="last-words" data-i="${i - 1}">${esc(AW.tx('life', 'words' + i, s))}</button>`).join('')}</div>
+      </section>`;
     },
 
     // ---------- 成年檢定 ----------
@@ -658,20 +784,26 @@
       const friends = AW.NPC.metList(s).map((id) => `<span class="chip info">${AW.NPC.icon(id)}${esc(AW.NPC.name(id))} ${AW.NPC.bond(s, id)}</span>`).join('');
       if (friends) career += `<h4>👥 朋友（好友度）</h4><div class="chips-row">${friends}</div>`;
       if (s.fin && s.fin.taxTotal) career += `<div class="c-row"><span>🧾 一生繳稅</span><b>${AW.fmtMoney(s.fin.taxTotal)}</b></div>`;
-      const stats = ['fps', 'dota', 'reflex', 'study', 'social', 'tech', 'leader', 'teamwork', 'fame']
+      career += this.rCasinoStats(s, s.counters, '一生賭場戰績');
+      if (s.kids && s.kids.length) career += `<h4>👨‍👧 家人</h4><div class="chips-row">${s.kids.map((k) => `<span class="chip info">${k.pro ? '🎮' : '🧒'}${esc(k.name)}${k.pro ? '（職業選手）' : ''}</span>`).join('')}${s.grandkids ? `<span class="chip info">🧸孫子 ×${s.grandkids}</span>` : ''}</div>`;
+      if (s.wishes && s.wishes.length) career += `<h4>📝 遺願清單 ${s.wishes.filter((w) => w.done).length}/${s.wishes.length}</h4><div class="chips-row">${s.wishes.map((w) =>
+        `<span class="chip ${w.done ? 'up' : ''}">${w.done ? '✅' : '⬜'}${esc(AW.tx('wish.' + w.id, 'name', s))}</span>`).join('')}</div>`;
+      const stats = ['fps', 'dota', 'reflex', 'study', 'social', 'tech', 'leader', 'teamwork', 'tactics', 'fame']
         .filter((k) => s.stats[k]).map((k) => `<span class="chip info">${AW.STATS[k].icon}${Math.round(s.stats[k])}</span>`).join('');
       return `${this.header()}
       <div class="page narrow">
         <section class="card ending ${end.good ? 'good' : ''} pop">
           <div class="end-icon">${end.icon}</div>
-          <div class="end-label">結局</div>
+          <div class="end-label">${end.life ? '人生終章' : '結局'}</div>
           <h2>${esc(end.name)}</h2>
           <p class="end-text">${esc(AW.val(end.text, s))}</p>
-          <div class="end-meta">${esc(s.displayName)} · ${s.age} 歲，故事告一段落</div>
+          <div class="end-meta">${esc(s.displayName)} · ${s.dead ? `享年 ${s.age} 歲` : `${s.age} 歲，故事告一段落`}</div>
+          ${s.chapters && s.chapters.length ? `<div class="chips-row center">${s.chapters.map((c) => `<span class="pill">${AW.ENDINGS[c.id].icon} ${esc(AW.ENDINGS[c.id].name)}・${c.age} 歲</span>`).join('')}</div>` : ''}
           ${s.ending.grades ? `<div class="end-grades"><span>❤️ 健康 <b class="g-${s.ending.grades.health}">${s.ending.grades.health}</b></span><span>😊 幸福度 <b class="g-${s.ending.grades.mood}">${s.ending.grades.mood}</b></span></div>` : ''}
           ${AW.Love.endingLine(s) ? `<div class="end-meta">${esc(AW.Love.endingLine(s))}</div>` : ''}
           <div class="chips-row center">${stats}<span class="chip gold">💰${AW.fmtMoney(s.stats.money)}</span></div>
         </section>
+        ${s.dead ? this.rFuneral(s) : ''}
         <section class="card">
           ${career}
           <h4>🧬 傳承點結算</h4>${parts}
@@ -791,7 +923,7 @@
       const unmet = AW.NPC_ORDER.length - AW.NPC.metList(s).length;
       const rival = s.rival ? `<p class="muted small">🔥 宿敵王選手：${esc(s.rival.team)}（${AW.Esports.TIERS[s.rival.tier].name}），你的戰績 ${s.rival.w} 勝 ${s.rival.l} 敗</p>` : '';
       return `<h3>👥 朋友</h3>
-        <p class="muted small">「🎮 揪團開黑」可以提升開黑朋友的好友度；太久沒聯絡，好友度會慢慢下降（人緣 60 以上下降較慢）。${unmet ? `還有 ${unmet} 位朋友沒認識，人緣越高越容易遇到。` : ''}</p>
+        <p class="muted small">「🎮 揪團開黑」可以提升開黑朋友的好友度，胡投顧則要靠「💹 找胡投顧聊投資」或交際類行動；太久沒聯絡，好友度會慢慢下降（人緣 60 以上下降較慢）。${unmet ? `還有 ${unmet} 位朋友沒認識，人緣越高越容易遇到。` : ''}</p>
         ${rival}${cards}
         <div class="row end"><button class="btn primary" data-act="close-modal">關閉</button></div>`;
     },
@@ -801,7 +933,8 @@
       const s = this.S;
       const C = AW.Casino;
       const c = this.cas;
-      const st = C.state(s);
+      const kind = C.kindOf(c.game);
+      const st = C.state(s, kind);
       const money = s.stats.money;
       if (c.bet !== 'all' && c.bet > money) c.bet = C.BETS.filter((b) => b <= money).pop() || 1000;
       const tabs = [['dice', '🎲 骰寶'], ['slots', '🎰 拉霸'], ['lottery', '🎟️ 彩券']].map(([g, n]) =>
@@ -834,7 +967,8 @@
           <div class="cas-net">${r.net > 0 ? `贏了 ${AW.fmtMoney(r.net)}！` : r.net < 0 ? `輸了 ${AW.fmtMoney(-r.net)}` : '不輸不贏'}</div></div>`;
       }
       return `<h3>🎰 賭場 <span class="pill gold">💰 ${AW.fmtMoney(money)}</span>
-          <span class="pill">今年剩 ${Math.max(0, C.MAX_PLAYS - C.plays(s))} 次</span></h3>
+          <span class="pill" title="骰寶、拉霸合計">🎲🎰 今年剩 ${C.left(s, 'table')} 次</span>
+          <span class="pill">🎟️ 彩券剩 ${C.left(s, 'lotto')} 次</span></h3>
         <div class="tabs">${tabs}</div>
         ${body}
         ${st.ok ? '' : `<p class="ac-lock center-text">🔒 ${esc(st.reason)}</p>`}
@@ -845,14 +979,33 @@
           <button class="btn" data-act="close-modal">離開賭場</button></div>`;
     },
 
+    // 告別式：出席的人、致詞、墓誌銘
+    rFuneral(s) {
+      const vs = (s.farewell && s.farewell.visitors) || [];
+      const npcs = vs.filter((v) => v.type === 'npc').map((v) => {
+        const b = AW.NPC.bond(s, v.id);
+        return `<div class="eulogy"><span class="si-icon">${AW.NPC.icon(v.id)}</span><div><b>${esc(AW.NPC.name(v.id))}</b><p>「${esc(AW.tx('npc.' + v.id, b >= 70 ? 'eulogy_high' : 'eulogy', s))}」</p></div></div>`;
+      }).join('');
+      const fam = vs.filter((v) => v.type !== 'npc').length ? `<div class="notes">${this.visitorLines(s, vs.filter((v) => v.type !== 'npc'))}</div>` : '';
+      return `<section class="card funeral">
+        <h3>🕊️ ${esc(AW.tx('life', 'funeral_title', s))}</h3>
+        ${fam}${npcs || (fam ? '' : `<p class="muted">${esc(AW.tx('life', 'funeral_none', s))}</p>`)}
+        <div class="epitaph"><small>${esc(AW.tx('life', 'epitaph_title', s))}</small><div>${esc(s.displayName)}</div><p>${esc(AW.tx('life', 'epitaph' + ((s.lastWords || 0) + 1), s))}</p></div>
+      </section>`;
+    },
+
     // ======================= 圖鑑 =======================
     rGallery() {
       const m = AW.Meta.get();
-      const ends = Object.keys(AW.ENDINGS).map((id) => {
+      const card = (id) => {
         const e = AW.ENDINGS[id];
         const n = m.endings[id];
         return `<div class="gal ${n ? 'got' : ''}"><div class="gal-icon">${n ? e.icon : '❔'}</div><b>${n ? esc(e.name) : '？？？'}</b>${n ? `<small>達成 ${n} 次</small>` : ''}</div>`;
-      }).join('');
+      };
+      const ids = Object.keys(AW.ENDINGS);
+      const chapters = ids.filter((id) => !AW.ENDINGS[id].life);
+      const lives = ids.filter((id) => AW.ENDINGS[id].life);
+      const got = (list) => list.filter((id) => m.endings[id]).length;
       const achs = AW.ACHIEVEMENTS.map((a) => {
         const got = m.achievements[a.id];
         return `<div class="gal ${got ? 'got' : ''}"><div class="gal-icon">${got ? a.icon : '🔒'}</div><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></div>`;
@@ -860,7 +1013,8 @@
       return `${this.header()}
       <div class="page">
         <h2>📖 結局與成就</h2>
-        <section class="card"><h3>結局 <span class="pill">${Object.keys(m.endings).length} / ${Object.keys(AW.ENDINGS).length}</span></h3><div class="gal-grid">${ends}</div></section>
+        <section class="card"><h3>職涯章節 <span class="pill">${got(chapters)} / ${chapters.length}</span></h3><div class="gal-grid">${chapters.map(card).join('')}</div></section>
+        <section class="card"><h3>人生終章 <span class="pill">${got(lives)} / ${lives.length}</span></h3><div class="gal-grid">${lives.map(card).join('')}</div></section>
         <section class="card"><h3>成就 <span class="pill">${Object.keys(m.achievements).length} / ${AW.ACHIEVEMENTS.length}</span></h3><div class="gal-grid">${achs}</div></section>
         <div class="row end"><button class="btn" data-act="back">返回</button></div>
       </div>`;
@@ -901,8 +1055,12 @@
             <li>🏁 結局會依一生的平均健康與心情評等，評等高可多拿傳承點。35～49 歲時身家夠多、心情好，可以選擇「財富自由」提早退休。</li>
             <li>📈 能力越高越難練，FPS / DOTA 在 6～15 歲成長最快，反應力在 12 歲前成長最快。</li>
             <li>🛒 <b>道具商店</b>：用金錢買裝備（永久成長加成）、消耗品、額外行動數、幸運御守；有交往對象時還能買禮物。</li>
-            <li>🎰 <b>賭場</b>（18 歲起）：骰寶、拉霸、彩券，每年最多 10 次。十賭九輸，小賭怡情。</li>
+            <li>🎰 <b>賭場</b>（18 歲起）：骰寶和拉霸每年合計 10 次，彩券另外可以買 10 次。十賭九輸，小賭怡情。</li>
             <li>💕 <b>感情</b>：告白或邂逅成功後開始交往。不約會的話好感度每年下降，太低會分手；感情穩定可以求婚、結婚。</li>
+            <li>🎬 <b>章節</b>：拿到世界冠軍、當上大老闆、退役或退休時，可以選擇「就此落幕」結算，或「繼續人生」進入第二幕。</li>
+            <li>🛤️ <b>人生第二幕</b>：實況主（目標百萬訂閱）、電競教練（冠軍教練）、創業從商或董事長（商業大亨）、退休享福。50 歲後每回合 2 年，65 歲後每回合 3 年、每年 1 個行動。</li>
+            <li>🕯️ <b>晚年</b>：60 歲會寫下遺願清單；年紀越大、健康越差，越可能離開人世。最後的告別式上，好朋友們會來送你一程。</li>
+            <li>👨‍👩‍👧 <b>家庭</b>：結婚後可能有孩子，常陪孩子打電動，他們長大也許會成為職業選手。人緣很高時可能同時交往……小心修羅場。</li>
             <li>🧬 每局結束獲得傳承點，可購買永久升級與天賦。結婚、累積財富也能多拿傳承點。</li>
           </ul>
           <p class="muted small">進度每年自動存檔在瀏覽器中。</p>
@@ -962,6 +1120,7 @@
       casino() {
         if (!AW.Shop.open(this.S)) return;
         this.cas = { game: (this.cas && this.cas.game) || 'dice', bet: (this.cas && this.cas.bet) || 10000, last: null };
+        AW.Casino.enter(this.S);
         this.modal(this.rCasino(), 'wide');
       },
       'cas-game'(d) { this.cas.game = d.g; this.cas.last = null; this.modalUpdate(this.rCasino()); },
@@ -1056,18 +1215,23 @@
       },
       decide(d) { E.resolveDecision(this.S, Number(d.i)); this.afterEngine(); },
       retire() {
-        this.confirm(this.S.phase === 'esports' ? '確定要宣布退役嗎？這一局將會結束。' : '確定要提前退休嗎？這一局將會結束。', 'retire-confirm', '確定');
+        this.confirm(this.S.phase === 'esports' ? '確定要宣布退役嗎？職業生涯這一章將會結束。' : '確定要提前退休嗎？職涯這一章將會結束。', 'retire-confirm', '確定');
       },
+      curtain() { this.confirm(AW.tx('life', 'curtain_confirm', this.S), 'curtain-confirm', '就此落幕'); },
+      'curtain-confirm'() { this.closeModal(); E.curtain(this.S); this.afterEngine(); },
+      'end-here'() { E.endHere(this.S); this.afterEngine(); },
+      'continue-life'() { E.continueLife(this.S); this.ui = {}; this.afterEngine(); root.scrollTo && root.scrollTo({ top: 0, behavior: 'smooth' }); },
+      'last-words'(d) { E.lastWords(this.S, Number(d.i)); this.afterEngine(); },
       fire() { this.confirm(AW.tx('status', 'fire_confirm', this.S), 'fire-confirm', '提早退休'); },
       'fire-confirm'() {
         this.closeModal();
-        if (E.canFire(this.S)) E.finish(this.S, 'fire');
+        if (E.canFire(this.S)) E.offerChapter(this.S, 'fire');
         this.afterEngine();
       },
       'retire-confirm'() {
         this.closeModal();
         const s = this.S;
-        E.finish(s, s.phase === 'esports' ? AW.Esports.endingFor(s) : AW.Engineer.endingFor(s));
+        E.offerChapter(s, s.phase === 'esports' ? AW.Esports.endingFor(s) : AW.Engineer.endingFor(s));
         this.afterEngine();
       },
 

@@ -91,6 +91,13 @@
     uni:     { name: '大學', icon: '🏛️', slots: 2 },
     job:     { name: '上班族', icon: '💼', slots: 2 },
     startup: { name: '創業家', icon: '🚀', slots: 2 },
+    // 第二幕（v2.0）
+    streamer: { name: '實況主', icon: '📺', slots: 2 },
+    coach:    { name: '電競教練', icon: '📋', slots: 2 },
+    biz:      { name: '企業家', icon: '🏪', slots: 2 },
+    chairman: { name: '董事長', icon: '👑', slots: 2 },
+    retired:  { name: '退休生活', icon: '🎣', slots: 2 },
+    elder:    { name: '晚年', icon: '🧓', slots: 1 },
   };
 
   const Engine = (AW.Engine = {
@@ -113,7 +120,7 @@
         displayName: '劉家維', proName: null,
         trait: opts.trait,
         memory: m.upgrades.memory || 0,
-        stats: { fps: 0, dota: 0, reflex: 0, study: 0, social: 0, teamwork: 0, tech: 0, leader: 0,
+        stats: { fps: 0, dota: 0, reflex: 0, study: 0, social: 0, teamwork: 0, tech: 0, leader: 0, tactics: 0,
           health: 80, mood: 80, love: 0, fame: 0, money: (m.upgrades.rich || 0) * 100000 },
         flags: {}, yearFlags: {}, nextYearFlags: {}, counters: {}, items: {}, love: null, life: { n: 0, health: 0, mood: 0 },
         seen: {}, log: [], pendingEvents: [], eventResult: null, yearActions: [], yearNotes: [],
@@ -140,10 +147,20 @@
       if (s.rival === undefined) s.rival = null;
       if (s.esports && !s.rival) AW.Esports.startRival(s);
       if (s.eng && s.eng.stage !== 'uni' && !s.eng.peers) AW.Office.makePeers(s);
+      // v2.0：章節、第二幕、子女、多位交往對象、遺願清單
+      if (s.stats.tactics == null) s.stats.tactics = 0;
+      if (s.love && !s.love.type) s.love.type = AW.Love.pickType();
+      s.chapters = s.chapters || [];
+      s.kids = s.kids || [];
+      s.grandkids = s.grandkids || 0;
+      s.flings = s.flings || [];
+      if (s.second === undefined) s.second = null;
+      if (s.wishes === undefined) s.wishes = null;
     },
 
     // ---------- 階段 ----------
     stageKey(s) {
+      if (s.phase === 'second') return AW.Second.stageKey(s);
       if (s.phase === 'esports') return 'pro';
       if (s.phase === 'engineer') return s.eng.stage;
       if (s.age >= 18) return 'extra';
@@ -167,6 +184,7 @@
       return n;
     },
     title(s) {
+      if (s.phase === 'second') return AW.Second.title(s);
       if (s.phase === 'esports') return `${AW.Esports.TIERS[s.esports.tier].name}・${s.esports.team}`;
       if (s.phase === 'engineer') {
         if (s.eng.stage === 'uni') return s.eng.topUni ? '頂大資工系' : '資工系學生';
@@ -336,6 +354,7 @@
       if (s.phase === 'esports') s.season = AW.Esports.runSeason(s);
       else if (s.phase === 'engineer' && s.eng.stage === 'job') s.season = AW.Office.runYear(s);
       else if (s.phase === 'engineer' && s.eng.stage === 'startup') s.season = AW.Office.runStartup(s);
+      else if (s.phase === 'second') s.season = AW.Second.runYear(s);
       if (s.season) {
         s.step = 'season';
         Save.save(s);
@@ -363,27 +382,68 @@
       }
       if (s.phase === 'esports') AW.Esports.yearEnd(s);
       if (s.phase === 'engineer') AW.Engineer.yearEnd(s);
+      if (s.phase === 'second') AW.Second.yearEnd(s);
+      this.passiveYear(s);
+    },
+
+    // 每年都會發生的事（快轉的年份也會跑）：道具、理財、感情、朋友、子女、健康、死亡
+    passiveYear(s) {
       AW.Shop.yearEnd(s);
       AW.Finance.yearEnd(s);
       if (s.flags.dog) AW.applyEffects(s, { health: 2, mood: 2 });
       AW.Love.yearEnd(s);
+      AW.Family.yearEnd(s);
       AW.NPC.yearEnd(s);
       this.healthYear(s);
       this.checkVitals(s, false);
+      if (s.phase === 'second') AW.Second.checkWishes(s);
+      this.deathCheck(s);
       // 人生回顧：記錄每年的健康與心情
       s.life.n += 1;
-      s.life.health += s.stats.health;
+      // 健康以「當年的健康上限」換算，老了不會因為上限降低而被扣分
+      s.life.health += s.stats.health * 100 / AW.condMax(s, 'health');
       s.life.mood += s.stats.mood;
       this.checkAchievements(s);
     },
 
-    STRESS: { teen: 2, adult: 3 },
+    // 快轉的年份：沒有事件與行動，只結算被動的變化
+    silentYear(s) {
+      s.age += 1;
+      s.yearFlags = s.nextYearFlags || {};
+      s.nextYearFlags = {};
+      s.yearActions = [];
+      AW.Finance.beginYear(s);
+      if (s.phase === 'second') AW.Second.silentYear(s);
+      this.passiveYear(s);
+    },
+
+    // ---------- 死亡（v2.0） ----------
+    // 60 歲起每年擲骰：機率隨年齡指數上升，健康差、慢性病會更高
+    DEATH: { from: 60, base: 0.005, growth: 1.11, max: 105 },
+    deathChance(s) {
+      const D = this.DEATH;
+      if (s.age < D.from) return 0;
+      if (s.age >= D.max) return 1;
+      const h = s.stats.health;
+      const hm = h >= 70 ? 0.6 : h >= 50 ? 0.9 : h >= 30 ? 1.4 : 2.2;
+      return Math.min(1, D.base * Math.pow(D.growth, s.age - D.from) * hm * (s.flags.chronic ? 1.5 : 1) * (s.yearFlags.checkup ? 0.7 : 1));
+    },
+    deathCheck(s) {
+      if (s.pendingDeath || s.phase === 'ended') return;
+      if (AW.chance(this.deathChance(s))) {
+        s.pendingDeath = true;
+        this.note(s, '🕯️', AW.tx('life', 'msg_dying', s));
+      }
+    },
+
+    STRESS: { teen: 2, adult: 3, retired: 1 },
     // 年齡造成的健康衰退：[幾歲起, 每年扣多少]
-    AGING: [[50, 3], [40, 2], [30, 1]],
+    AGING: [[75, 5], [65, 4], [50, 3], [40, 2], [30, 1]],
 
     // 職位越高壓力越大
     jobStress(s) {
       if (s.phase === 'esports') return s.esports.tier >= 4 ? 1 : 0;
+      if (s.phase === 'second') return ['biz', 'chairman'].includes(s.second.job) ? 2 : s.second.job === 'retired' ? 0 : 1;
       if (s.phase === 'engineer') {
         if (s.eng.stage === 'startup') return 2;
         if (s.eng.stage === 'job') return s.eng.rank >= 5 ? 2 : s.eng.rank >= 3 ? 1 : 0;
@@ -394,10 +454,12 @@
     // 長期健康：生活壓力、年齡衰退、慢性病、體弱多病
     healthYear(s) {
       // 生活壓力：青少年與成人每年心情自然下降
-      const stress = s.phase === 'student' ? (s.age >= 12 ? this.STRESS.teen : 0) : this.STRESS.adult + this.jobStress(s);
+      const retired = s.phase === 'second' && (s.second.job === 'retired' || s.age >= AW.Second.ELDER_AGE);
+      const stress = s.phase === 'student' ? (s.age >= 12 ? this.STRESS.teen : 0) : retired ? this.STRESS.retired : this.STRESS.adult + this.jobStress(s);
       if (stress) AW.applyEffects(s, { mood: -stress });
       const aging = this.AGING.find(([age]) => s.age >= age);
-      if (aging) AW.applyEffects(s, { health: -aging[1] });
+      // 運動系另一半會拉著你運動，年齡衰退 -1
+      if (aging) AW.applyEffects(s, { health: -Math.max(0, aging[1] - AW.Love.healthCare(s)) });
       if (s.flags.chronic) AW.applyEffects(s, { health: -4 });
       if (s.stats.health < 30) {
         s.counters.lowHealth = (s.counters.lowHealth || 0) + 1;
@@ -423,11 +485,17 @@
     FIRE: { age: 35, maxAge: 49, min: 70000000, mult: 25 },
     fireTarget(s) { return Math.max(this.FIRE.min, AW.Finance.yearlySpend(s) * this.FIRE.mult); },
     canFire(s) {
-      return s.phase !== 'student' && s.phase !== 'ended' && !s.pendingEnding && s.age >= this.FIRE.age && s.age <= this.FIRE.maxAge
+      return (s.phase === 'esports' || s.phase === 'engineer') && !s.pendingEnding && s.age >= this.FIRE.age && s.age <= this.FIRE.maxAge
         && AW.Finance.netWorth(s) >= this.fireTarget(s) && s.stats.mood >= AW.TIER.good && s.stats.money >= 0;
     },
 
     checkVitals(s, quiet) {
+      if (s.stats.health <= 0 && s.age >= AW.Second.ELDER_AGE && !s.pendingDeath) {
+        s.stats.health = 1;
+        s.pendingDeath = true;
+        this.note(s, '🕯️', AW.tx('life', 'msg_dying', s));
+        return null;
+      }
       if (s.stats.health <= 0) {
         s.flags.collapsed = (s.flags.collapsed || 0) + 1;
         s.stats.health = 35;
@@ -462,7 +530,17 @@
 
     nextYear(s) {
       if (!this.canAdvance(s)) return;
-      if (s.pendingEnding) return this.finish(s, s.pendingEnding);
+      if (s.pendingDeath) return this.startFarewell(s);
+      if (s.pendingEnding) return this.offerChapter(s, s.pendingEnding);
+      // 第二幕：50 歲後一回合 2 年、65 歲後 3 年（多出來的年份快轉）
+      if (s.phase === 'second') {
+        const n = AW.Second.turnYears(s);
+        for (let i = 1; i < n; i++) {
+          this.silentYear(s);
+          if (s.pendingDeath) { Save.save(s); return this.startFarewell(s); }
+          if (s.pendingEnding) return this.offerChapter(s, s.pendingEnding);
+        }
+      }
       s.age += 1;
       if (s.phase === 'student') {
         if (s.age === 18 || (s.age === 19 && s.flags.extraYear)) {
@@ -477,6 +555,8 @@
         if (AW.Esports.onNewYear(s)) return;
       } else if (s.phase === 'engineer') {
         if (AW.Engineer.onNewYear(s)) return;
+      } else if (s.phase === 'second') {
+        AW.Second.onNewYear(s);
       }
       if (s.step === 'decision') { Save.save(s); return; }
       this.beginYear(s);
@@ -491,7 +571,7 @@
       s.decision = null;
       if (r.text) this.note(s, d.icon || '📌', r.text);
       if (s.step === 'decision') {
-        if (s.pendingEnding) return this.finish(s, s.pendingEnding);
+        if (s.pendingEnding) return this.offerChapter(s, s.pendingEnding);
         this.beginYear(s);
       }
       Save.save(s);
@@ -549,16 +629,81 @@
       this.beginYear(s);
     },
 
+    // ---------- 章節（v2.0） ----------
+    // 這些結局一定是終點，不能「繼續人生」
+    FINAL_ENDINGS: ['ordinary', 'burnout', 'bankrupt'],
+    hasChapter(s, id) { return s.chapters.some((c) => c.id === id); },
+
+    // 職涯告一段落：讓玩家選擇「就此落幕」或「繼續人生」
+    offerChapter(s, id) {
+      s.pendingEnding = null;
+      if (this.FINAL_ENDINGS.includes(id) || AW.ENDINGS[id].life) return this.finish(s, id);
+      // 同一個章節已經達成過（例如衛冕後退役），直接進入下一段人生
+      if (this.hasChapter(s, id)) {
+        this.note(s, AW.ENDINGS[id].icon, AW.tx('life', 'msg_chapter_again', s, { 章節: AW.ENDINGS[id].name }));
+        return this.continueLife(s, id, true);
+      }
+      s.step = 'chapter';
+      s.chapterOffer = id;
+      Save.save(s);
+      return null;
+    },
+    endHere(s) {
+      if (s.step !== 'chapter') return null;
+      return this.finish(s, s.chapterOffer);
+    },
+    continueLife(s, id, again) {
+      id = id || s.chapterOffer;
+      if (!again) {
+        const m = Meta.get();
+        s.chapters.push({ id, age: s.age, isNew: !m.endings[id] });
+        m.endings[id] = (m.endings[id] || 0) + 1;
+        Meta.save();
+        this.addLog(s, AW.ENDINGS[id].icon, `章節：${AW.ENDINGS[id].name}`);
+        this.checkAchievements(s);
+        if (Object.keys(AW.ENDINGS).every((k) => m.endings[k])) this.unlockAchievement(s, 'all_endings');
+      }
+      s.chapterOffer = null;
+      s.age += 1;
+      s.decision = AW.Second.decision(s, id);
+      s.step = 'decision';
+      Save.save(s);
+      return s.decision;
+    },
+
+    // ---------- 臨終（v2.0） ----------
+    startFarewell(s) {
+      s.step = 'farewell';
+      s.farewell = { visitors: AW.Second.visitors(s) };
+      Save.save(s);
+      return null;
+    },
+    lastWords(s, idx) {
+      if (s.step !== 'farewell') return null;
+      s.dead = true;
+      s.lastWords = Math.max(0, Math.min(2, idx | 0));
+      return this.finish(s, AW.Second.lifeEnding(s));
+    },
+    // 第二幕隨時可以落幕：以目前的人生做結算（還活著）
+    curtain(s) {
+      if (s.phase !== 'second' || s.step !== 'summary' || s.pendingDeath) return null;
+      return this.finish(s, AW.Second.lifeEnding(s));
+    },
+
     // ---------- 結局 ----------
     PLAIN_ENDINGS: ['ordinary', 'pro_retire', 'senior_eng', 'startup_fail'],
     HAPPY_MOOD: 75,
+    // 各章節的傳承點
+    CHAPTER_LEGACY: { world_champ: 10, tech_boss: 10, champ_coach: 6, mega_streamer: 6, tycoon: 6 },
+    LIFE_LEGACY: { centenarian: 3, legend: 5, family: 2 },
+    INHERIT: { per: 20000000, max: 5 },
 
     finish(s, endingId) {
       if (s.phase === 'ended') return s.ending;
       AW.Finance.liquidate(s);
       const life = this.lifeAvg(s);
-      // 職涯普通，但一生快樂又成家 → 平凡但幸福
-      if (this.PLAIN_ENDINGS.includes(endingId) && life.mood >= this.HAPPY_MOOD && s.love && s.love.status === 'married') endingId = 'happy_life';
+      // 職涯普通，但一生快樂又成家 → 平凡但幸福（沒有繼續人生時）
+      if (!s.chapters.length && this.PLAIN_ENDINGS.includes(endingId) && life.mood >= this.HAPPY_MOOD && s.love && s.love.status === 'married') endingId = 'happy_life';
       s.ending = { id: endingId, grades: { health: this.grade(life.health), mood: this.grade(life.mood) } };
       s.phase = 'ended';
       s.step = 'ended';
@@ -572,18 +717,29 @@
       // 國內冠軍：第一座 2 點，之後每座 +1，最多 5 點
       if (s.esports && s.esports.domesticTitles) parts.push([`國內冠軍 ×${s.esports.domesticTitles}`, Math.min(5, 1 + s.esports.domesticTitles)]);
       if (s.esports && s.esports.bestWorlds >= 3) parts.push(['世界賽四強', 3]);
-      if (endingId === 'world_champ') parts.push(['🏆 世界冠軍', 10]);
-      if (endingId === 'tech_boss') parts.push(['🏢 科技公司大老闆', 10]);
+      // 章節（含這次的結局）
+      const ids = s.chapters.map((c) => c.id);
+      if (!ids.includes(endingId)) ids.push(endingId);
+      for (const id of ids) if (this.CHAPTER_LEGACY[id]) parts.push([`${AW.ENDINGS[id].icon} ${AW.ENDINGS[id].name}`, this.CHAPTER_LEGACY[id]]);
+      const newChapters = s.chapters.filter((c) => c.isNew).length;
+      if (newChapters) parts.push([`新章節解鎖 ×${newChapters}`, newChapters * 2]);
+      if (s.chapters.length) parts.push([`繼續人生 ×${s.chapters.length}`, s.chapters.length]);
+      if (this.LIFE_LEGACY[endingId]) parts.push([`${AW.ENDINGS[endingId].icon} ${AW.ENDINGS[endingId].name}`, this.LIFE_LEGACY[endingId]]);
       if (s.love && s.love.status === 'married') parts.push(['成家', 2]);
-      if (s.stats.money >= 100000000) parts.push(['富可敵國', 2]);
-      else if (s.stats.money >= 10000000) parts.push(['家財萬貫', 1]);
+      if (s.kids.length) parts.push([`子女 ×${s.kids.length}`, Math.min(3, s.kids.length)]);
+      const wishes = (s.wishes || []).filter((w) => w.done).length;
+      if (wishes) parts.push([`完成遺願 ×${wishes}`, Math.min(5, wishes)]);
+      // 遺產：每 2000 萬 1 點，最多 5 點
+      const inherit = Math.min(this.INHERIT.max, Math.floor(Math.max(0, s.stats.money) / this.INHERIT.per));
+      if (inherit) parts.push([`${s.dead ? '遺產' : '家產'} ${AW.fmtMoney(s.stats.money)}`, inherit]);
       const GP = { S: 2, A: 1 };
       if (GP[s.ending.grades.health]) parts.push([`健康評等 ${s.ending.grades.health}`, GP[s.ending.grades.health]]);
       if (GP[s.ending.grades.mood]) parts.push([`幸福度 ${s.ending.grades.mood}`, GP[s.ending.grades.mood]]);
-      if (!m.endings[endingId]) parts.push(['新結局解鎖', 2]);
+      const isNew = !m.endings[endingId];
+      if (isNew) parts.push(['新結局解鎖', 2]);
       if (endingId === 'ordinary') parts.push(['參加獎', 1]);
       const total = parts.reduce((a, p) => a + p[1], 0);
-      m.endings[endingId] = (m.endings[endingId] || 0) + 1;
+      if (!s.chapters.some((c) => c.id === endingId)) m.endings[endingId] = (m.endings[endingId] || 0) + 1;
       m.runs += 1;
       m.legacy += total;
       m.totalLegacy += total;

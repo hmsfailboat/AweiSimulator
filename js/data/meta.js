@@ -4,6 +4,8 @@
   const AW = root.AW;
 
   // variant(s) 回傳文本版本，例 'ipo' → 使用 text_ipo
+  // life: true → 人生終章（過世或在第二幕落幕時的結局）；其他是職涯章節，可以選擇「繼續人生」
+  const alive = (s) => (s.dead ? 'dead' : 'alive');
   AW.ENDINGS = {
     world_champ: { good: true },
     tech_boss: { good: true, variant: (s) => (s.eng.startup >= 5 ? 'ipo' : 'ceo') },
@@ -19,6 +21,16 @@
     fire: { good: true },
     burnout: {},
     bankrupt: {},
+    // 第二幕的章節（v2.0）
+    champ_coach: { good: true },
+    mega_streamer: { good: true },
+    tycoon: { good: true },
+    // 人生終章（v2.0）
+    peaceful: { life: true, variant: alive },
+    family: { life: true, good: true, variant: alive },
+    legend: { life: true, good: true, variant: alive },
+    centenarian: { life: true, good: true, variant: alive },
+    lonely: { life: true, variant: alive },
   };
 
   AW.ACHIEVEMENTS = [
@@ -59,12 +71,33 @@
     { id: 'taxpayer', check: (s) => s.fin && s.fin.taxTotal >= 10000000 },
     { id: 'in_debt', check: (s) => s.flags.debt },
     { id: 'hu_win', check: (s) => s.flags.huWin },
+    // v2.0
+    { id: 'second_act', check: (s) => s.chapters && s.chapters.length >= 1 },
+    { id: 'dynasty', check: (s) => s.esports && s.esports.worldTitles >= 3 },
+    { id: 'champ_coach', check: (s) => s.second && s.second.worldTitles >= 1 },
+    { id: 'top_streamer', check: (s) => s.flags.topStreamer },
+    { id: 'tycoon', check: (s) => s.chapters && s.chapters.some((c) => c.id === 'tycoon') },
+    { id: 'double_crown', check: (s) => s.chapters && s.chapters.some((c) => c.id === 'world_champ') && s.chapters.some((c) => c.id === 'tech_boss' || c.id === 'tycoon') },
+    { id: 'comeback', check: (s) => s.flags.comeback },
+    { id: 'hall_of_fame', check: (s) => s.flags.hallOfFame },
+    { id: 'old_soldier', check: (s) => s.flags.oldSoldier },
+    { id: 'team_owner', check: (s) => s.flags.ownTeam },
+    { id: 'time_master', check: (s) => s.flags.timeMaster },
+    { id: 'shura', check: (s) => s.flags.shura },
+    { id: 'prodigal', check: (s) => s.flags.shura && s.love && s.love.status === 'married' },
+    { id: 'parent', check: (s) => s.kids && s.kids.length >= 1 },
+    { id: 'tiger_son', check: (s) => s.flags.tigerSon },
+    { id: 'grandparent', check: (s) => s.grandkids >= 1 },
+    { id: 'philanthropist', check: (s) => (s.counters.donated || 0) >= 30000000 },
+    { id: 'wishes_all', check: (s) => s.flags.allWishes },
+    { id: 'centenarian', check: (s) => s.ending && s.ending.id === 'centenarian' },
+    { id: 'life_winner', check: (s) => s.ending && s.ending.id === 'legend' },
     { id: 'all_endings' },
   ];
 
   AW.UPGRADES = {
-    talent: { max: 10, cost: (lv) => 2 + lv * 4 },
-    memory: { max: 5, cost: (lv) => 5 + lv * 6 },
-    rich: { max: 3, cost: (lv) => 3 + lv * 3 },
+    talent: { max: 10, cost: (lv) => 3 + lv * 5 },
+    memory: { max: 5, cost: (lv) => 6 + lv * 7 },
+    rich: { max: 3, cost: (lv) => 4 + lv * 3 },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

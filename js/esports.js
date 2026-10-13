@@ -61,25 +61,30 @@
       const r = s.rival;
       return r ? { 宿敵戰隊: r.team, 宿敵戰績: `${r.w} 勝 ${r.l} 敗` } : {};
     },
+    // 阿維當教練時，王選手也轉任教練（coach = 教練實力）
+    rivalCoaching(s) { return s.phase === 'second' && s.rival && s.rival.coach != null; },
     rivalTeamPower(s) {
       const r = s.rival;
-      return 0.45 * (0.8 * r.skill + 10) + 0.55 * TIERS[r.tier].mates;
+      const own = this.rivalCoaching(s) ? r.coach : 0.8 * r.skill + 10;
+      return 0.45 * own + 0.55 * TIERS[r.tier].mates;
     },
-    rivalName(s) { return `${s.rival.team}（${AW.NPC.name('wang')}）`; },
-    rivalYear(s) {
+    rivalName(s) { return `${s.rival.team}（${AW.NPC.name('wang')}${this.rivalCoaching(s) ? '執教' : ''}）`; },
+    rivalYear(s, myTeam) {
       const r = s.rival;
       if (!r) return;
-      if (s.age < RIVAL.growUntil) r.skill += AW.sround(AW.randInt(1, 4) * AW.diminish(r.skill));
+      const key = this.rivalCoaching(s) ? 'coach' : 'skill';
+      if (key === 'coach') r.coach += AW.randInt(0, 2);
+      else if (s.age < RIVAL.growUntil) r.skill += AW.sround(AW.randInt(1, 4) * AW.diminish(r.skill));
       else if (s.age >= RIVAL.declineFrom) r.skill -= AW.randInt(1, 2);
-      r.skill = AW.clamp(r.skill, 40, 99);
-      const target = RIVAL.tierSkill.filter((v) => r.skill >= v).length;
+      r[key] = AW.clamp(r[key], 40, 99);
+      const target = RIVAL.tierSkill.filter((v) => r[key] >= v).length;
       const nt = r.tier + Math.sign(target - r.tier);
       if (nt !== r.tier && (nt < r.tier || AW.chance(0.6))) {
         r.tier = nt;
-        r.team = this.teamName(nt, s.esports.team);
+        r.team = this.teamName(nt, myTeam);
         AW.Engine.note(s, '🔥', AW.tx('rival', 'transfer', s, this.rivalVars(s)));
-      } else if (r.team === s.esports.team) {
-        r.team = this.teamName(r.tier, s.esports.team);
+      } else if (r.team === myTeam) {
+        r.team = this.teamName(r.tier, myTeam);
       }
     },
 
@@ -87,7 +92,7 @@
     power(s) {
       const st = s.stats;
       return 0.5 * this.mainStat(s) + 0.25 * st.reflex + 0.15 * st.teamwork + 0.1 * st.mood - (s.yearFlags.lag ? 4 : 0)
-        - (st.health < AW.TIER.low ? 3 : 0);
+        - (st.health < AW.TIER.low ? 3 : 0) + AW.Love.esportsPower(s);
     },
     teamPower(s) { return 0.45 * this.power(s) + 0.55 * TIERS[s.esports.tier].mates; },
     winProb(T, opp, bonus) { return AW.clamp(1 / (1 + Math.exp(-(T - opp) / 6)) + (bonus || 0), 0.02, 0.98); },
@@ -105,12 +110,14 @@
       return { oppName, opp, bo, p, games, w, l, won: w >= need };
     },
 
-    runSeason(s) {
-      const e = s.esports;
+    // o：教練模式等覆寫 { tier, team, T, coach }
+    runSeason(s, o) {
+      const e = o || { tier: s.esports.tier, team: s.esports.team, T: this.teamPower(s) };
       const tier = TIERS[e.tier];
       const lg = LEAGUES[tier.league];
-      const T = this.teamPower(s);
-      const clutch = AW.traitOf(s).clutch || 0;
+      const T = e.T;
+      // 大心臟天賦；好感度 70 以上，另一半會到季後賽、世界賽現場應援
+      const clutch = (AW.traitOf(s).clutch || 0) + AW.Love.cheerClutch(s);
       const season = { kind: 'esports', title: AW.tx('rival', 'season_title', s), pill: `隊伍戰力 ${Math.round(T)}`,
         T: Math.round(T), league: tier.league, stages: [], leagueWins: 0, summary: [], worldsReach: 0,
         playoffWins: 0, champion: false, finalist: false };
@@ -213,7 +220,11 @@
       // 老化
       this.aging(s);
 
-      if (season.worldChampion) { s.pendingEnding = 'world_champ'; return; }
+      if (season.worldChampion) {
+        // 第一座世界冠軍是一個章節；繼續打的話挑戰衛冕（王朝）
+        if (!AW.Engine.hasChapter(s, 'world_champ')) { s.pendingEnding = 'world_champ'; return; }
+        AW.Engine.note(s, '👑', AW.tx('rival', 'msg_defend', s));
+      }
       if (s.age >= 32) {
         s.pendingEnding = this.endingFor(s);
         AW.Engine.note(s, '👋', '32 歲，是時候退役了。');
@@ -223,7 +234,7 @@
     },
 
     // 記錄與宿敵的對戰成績
-    rivalResults(s, season) {
+    rivalResults(s, season, coach) {
       const r = s.rival;
       if (!r) return;
       for (const st of season.stages) for (const m of st.matches) {
@@ -234,7 +245,7 @@
           else AW.Engine.note(s, '💢', AW.tx('rival', 'final_lose', s, this.rivalVars(s)));
         }
       }
-      this.rivalYear(s);
+      this.rivalYear(s, coach ? s.second.team : s.esports.team);
     },
 
     aging(s) {

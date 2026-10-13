@@ -29,5 +29,7 @@
   // 好友度：初始、每年下降（人緣 ≥ socialKeep 時下降較少）、揪團開黑增加量
   // 認識機率 = base × (meetBase + 人緣 / meetSocial) × (成年 adultMult) + 當年有相關行動 likeBonus
   AW.NPC_BOND = { start: 30, decay: 3, decaySocial: 1, socialKeep: 60, squad: 8,
-    meetBase: 0.2, meetSocial: 80, adultMult: 0.3, likeBonus: 0.04 };
+    meetBase: 0.2, meetSocial: 80, adultMult: 0.3, likeBonus: 0.04, oldAge: 60,
+    // 不打電動的朋友：當年有交際類行動時好友度 +social；「找胡投顧聊投資」+chat（再乘上人緣加成）
+    social: 4, chat: 8 };
 })(typeof window !== 'undefined' ? window : globalThis);

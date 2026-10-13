@@ -1355,12 +1355,16 @@ depressed_name = 🌧️ 憂鬱
 depressed_desc = 心情低於 20：可能陷入憂鬱，需要找人幫忙
 chronic_name = 🩺 慢性病
 chronic_desc = 每年健康 -4。可以在道具商店接受治療
+passion_name = 💞 熱戀
+passion_desc = 好感度 80 以上：能力成長 +5%、事件擲骰成功率 +5%
+cold_name = 🥶 感情冷淡
+cold_desc = 好感度低於 30：每年心情 -3，太低可能分手
 msg_chronic = 長年透支身體，醫生診斷出慢性病。（每年健康 -4，可在道具商店接受治療）
 msg_frail = 身體太虛弱，三天兩頭就生病……下一年行動數 -1。
 msg_warn = 醫生嚴肅地說：「再倒下一次，你的身體就真的撐不住了。」
 msg_final = 第三次倒下了。醫生下了最後通牒——這將是你拚命的最後一年。
 fire_button = 🏖️ 財富自由，提早退休
-fire_confirm = 存款已經足夠過一輩子了。確定要提早退休、享受人生嗎？這一局將會結束。
+fire_confirm = 存款已經足夠過一輩子了。確定要提早退休、享受人生嗎？職涯這一章將會結束。
 
 [item.treatment]
 icon = 🏥
@@ -1556,7 +1560,33 @@ result2 = 黑眼圈越來越深了。
 [love]
 # 交往對象名字的候選清單，用頓號「、」分隔
 names = 小雨、若晴、品妍、欣妤、子晴、芷涵、詩涵、語彤、宜蓁、雅婷、佳穎、思妤
-start = 💕 你和{另一半}開始交往了！
+start = 💕 你和{另一半}開始交往了！（{類型}）
+
+# 另一半的類型：name 顯示名稱｜desc 說明（滑鼠移到面板上的類型標籤會顯示）
+type_gamer_name = 🎮 電競迷
+type_gamer_desc = 一起打電動也算約會；好感度 50 以上，選手時期在場邊應援，戰力 +2。整年都沒打電動她會不開心。
+type_scholar_name = 📚 學霸
+type_scholar_desc = 好感度 50 以上，學力、技術力成長 +10%。一年打電動超過一次她會唸你。
+type_career_name = 💼 職場女強人
+type_career_desc = 婚後每年貢獻 80 萬家庭收入，買房分擔一半頭期款，創業時資金跑道多 1 年。工作很忙，好感度掉得比較快。
+type_sporty_name = 🏃 運動系
+type_sporty_desc = 一起運動也算約會；好感度 50 以上，每年因年齡下降的健康 -1。整年都沒運動她會不開心。
+type_rich_name = 💎 富家千金
+type_rich_desc = 結婚時娘家送 500 萬，婚後買房頭期款由娘家出。出社會後生活水準不能是「小資」，不然她會很不開心。
+type_jealous_name = 😤 吃醋王
+type_jealous_desc = 感情好時心情加分特別多；但好感度掉得快、常常吃醋，同時交往也更容易被抓包。
+
+# 另一半的要求沒做到時的提示
+need_gamer = {另一半}抱怨：「你今年都沒陪我打電動！」
+need_scholar = {另一半}嘆氣：「你可不可以少打一點電動……」
+need_sporty = {另一半}說：「你一整年都沒運動，這樣不行喔。」
+need_rich = {另一半}皺眉：「我們真的要過得這麼省嗎？」
+
+msg_dowry = 娘家送了 {金額} 當作結婚禮金！
+msg_split = 離婚協議：財產分走 {金額}。
+msg_house = {另一半}幫忙出了 {金額} 頭期款。
+msg_support = {另一半}全力支持你創業，資金跑道 +{年數} 年。
+msg_oppose = {另一半}不贊成你辭職創業，感情出現了裂痕……
 engage = 💍 你和{另一半}訂婚了！
 marry = 💒 你和{另一半}結婚了！
 breakup = 💔 你和{另一半}分手了……
@@ -1689,7 +1719,7 @@ desc = 送給{另一半}：好感度 +35、心情 +5
 icon = 💹
 name = 胡投顧
 job = 投資達人
-desc = 擅長操作台美股，家財萬貫。好友度越高，給的明牌越準；好友度 60 以上可以幫你代操投資。
+desc = 擅長操作台美股，家財萬貫。不打電動，要靠「找胡投顧聊投資」或交朋友、社團、應酬等交際活動維持感情。好友度越高明牌越準；60 以上可以代操投資、在你負債時伸出援手；70 以上會在董事會投你一票。
 intro = 高中社團認識一個午休時間在算殖利率的怪同學，大家都叫他「胡投顧」。他說：「錢要放對地方，才會自己長大。」
 intro_adult = 朋友的聚會上，一個戴著金錶的人遞來名片：「我姓胡，大家都叫我胡投顧。有興趣聊聊台積電嗎？」
 
@@ -1913,12 +1943,6 @@ choice3 = 自己處理
 success3 = 你當面跟對方說清楚，對方道歉離開了。
 fail3 = 對方情緒失控，你受了傷……
 
-[event.npc_corey_gym]
-icon = 🏋️
-title = Corey 的重訓課
-text = Corey：「你這樣不行，跟我去健身房。」
-result = 被操到隔天下不了床，但身體確實變好了。
-
 [event.robbery]
 icon = 🦹
 title = 闖空門
@@ -2054,10 +2078,12 @@ line_staff_guard = 保全 Corey
 line_loan_house = 房貸
 line_loan_shark = 地下錢莊
 line_interest = 負債利息
+line_partner = 另一半的收入
 line_invest = 投資損益
 shark_btn = 🦈 地下錢莊借 50 萬
 shark_desc = 借 50 萬，之後 3 年每年要還 30 萬
 shark_log = 向地下錢莊借了 50 萬……
+msg_auto_sell = 現金不夠，自動贖回投資 {金額} 補足。
 msg_debt = 負債中！利息 15%、生活壓力更大。（已連續 {年數} 年，{上限} 年就會破產）
 msg_bankrupt = 債務越滾越大，再也還不出來了……只能宣告破產。
 debt_status = 💳 負債中（{年數}/{上限} 年）
@@ -2097,7 +2123,7 @@ desc = 和開黑的朋友們一起打遊戲，所有開黑朋友好友度上升�
 [item.house]
 icon = 🏡
 name = 買房
-desc = 總價 1,500 萬，先付頭期款 2 成，其餘 20 年房貸。免房租、生活費 -40%，買下時心情 +10
+desc = 總價 1,500 萬，先付頭期款 2 成，其餘 20 年房貸。免房租、生活費 -40%，買下時心情 +10。結婚後另一半會幫忙出頭期款
 
 [achievement.friends_all]
 icon = 🤝
@@ -2158,4 +2184,846 @@ desc = 存款變成負數
 icon = 💹
 name = 明牌之神
 desc = 跟胡投顧的明牌大賺一筆
+
+
+# ============================================================
+#  人生第二幕（v2.0）
+#  清單用頓號「、」分隔
+# ============================================================
+
+[second]
+job_streamer = 實況主
+job_coach = 電競教練
+job_biz = 企業家
+job_chairman = 董事長
+job_retired = 退休生活
+job_elder = 晚年生活
+decision_title = 人生的下一步
+decision_chapter = 一個章節結束了，但人生還很長。接下來想做什麼？
+decision_switch = 想換個跑道嗎？
+decision_ousted = 被董事會趕下台了。要東山再起，還是就此退休？
+decision_closed = 公司收掉了。接下來呢？
+opt_defend = 🎮 繼續職業生涯，挑戰衛冕
+opt_defend_desc = 拿過一次世界冠軍，還想再拿第二座、第三座（王朝）
+msg_defend = 冠軍只是開始。下個賽季，目標是衛冕！
+opt_chairman = 👑 擔任董事長
+opt_chairman_desc = 帶領公司成為跨國企業、產業龍頭，甚至科技帝國
+opt_coach = 📋 轉任電競教練
+opt_coach_desc = 用戰術帶領新秀，目標是成為冠軍教練
+opt_streamer = 📺 成為全職實況主
+opt_streamer_desc = 起始訂閱 {訂閱}，目標百萬訂閱
+opt_biz = 🏪 創業從商：{主題}
+opt_biz_desc = 投入 {資金} 開店，目標是掛牌上市
+opt_biz_poor = 需要 {資金} 創業資金
+opt_comeback = 🔥 東山再起：{主題}
+opt_comeback_desc = 用賣掉股份的錢重新出發
+opt_retire = 🎣 退休享福
+opt_retire_desc = 旅行、釣魚、和老朋友開黑，好好享受人生
+opt_stay = 還是維持現狀
+theme_academy = 電競學院
+theme_cafe = 網咖連鎖
+theme_consult = 科技顧問公司
+theme_restaurant = 和阿方合開電競主題餐廳
+theme_breakfast = 和長長貓開電競早餐連鎖
+names_academy = Aweiisa 電競學院、天才電競學院、GG 學院
+names_cafe = 爆頭網咖、Respawn 網咖、阿維電競館
+names_consult = 阿維科技顧問、Last Hit 顧問、雲端阿維
+names_restaurant = 阿方的電競廚房、Headshot 牛排館、GG 小館
+names_breakfast = 長長貓電競早餐、排位前的蛋餅、晨間開黑
+start_streamer = 📺 開始全職實況！第一天開台就湧進大批觀眾。
+start_coach = 📋 成為 {戰隊} 的總教練！
+start_biz = 🏪 「{公司}」開幕了！（{主題}）
+start_chairman = 👑 從執行長升任 {公司} 董事長。
+start_retired = 🎣 正式退休，開始享受人生。
+msg_sell = 賣掉「{公司}」的股份，入帳 {金額}。
+msg_elder = 65 歲了，正式退休，進入人生的晚年。（之後每回合 3 年，每年 1 個行動）
+msg_switch = 決定轉換跑道，年度結算時選擇新的人生方向。
+title_stream = 📺 {名字} 的直播之年
+stage_stream = 季度觀看挑戰
+note_stream = {達標}／4 季達標，訂閱 {訂閱}（{變化}）
+stage_gala = 平台年度盛典
+note_gala_top = 👑 年度實況主！
+note_gala = 年度排名第 {名次}
+streamers = 魯肉飯 TV、阿嬤打電動、熬夜王小明、Neko 喵喵、鐵板燒 Gaming、芒果冰實況、大胖說遊戲、夜貓實況台、阿肥電玩、小企鵝 Live
+stream_goals = 新遊戲首播、24 小時馬拉松、抖內破紀錄、觀眾挑戰賽、跨年直播、聯動企劃、精華剪輯爆紅、新人輔導計畫
+msg_stream = 訂閱 {訂閱}（{變化}），年度盛典第 {名次} 名
+title_coach = 📋 {戰隊} 的教練賽季
+msg_coach = 執教 {戰隊}：{戰績}
+msg_coach_up = 帶隊奪冠，被 {戰隊}（{等級}）挖角！
+msg_coach_down = 戰績太差被解雇……轉任 {戰隊}（{等級}）總教練。
+title_biz = 🏪 {公司} 的經營之年
+title_chair = 👑 {公司} 的董事會年度
+stage_biz = 季度營運目標
+stage_chair = 季度營運目標
+biz_goals = 展店計畫、會員成長、網路行銷、新品上市、展店選址、員工訓練、成本控制、品牌聯名
+chair_goals = 海外市場、新產品線、股價表現、AI 布局、併購整合、法說會、供應鏈、ESG 評比
+note_venture_up = {達標}／4 季達標，公司成長了！
+note_venture_hold = {達標}／4 季達標，營運持平。
+note_venture_bad = 一季都沒達標……
+biz_stage_0 = 第一家店
+biz_stage_1 = 第二家分店
+biz_stage_2 = 連鎖品牌
+biz_stage_3 = 全台連鎖
+biz_stage_4 = 海外展店
+biz_stage_5 = 掛牌上市
+chair_stage_0 = 上市公司
+chair_stage_1 = 跨國企業
+chair_stage_2 = 產業龍頭
+chair_stage_3 = 科技帝國
+msg_venture_up = 「{公司}」成長為「{階段}」！
+msg_ousted = 連續兩年表現不佳，董事會投票把你趕下台，離開了一手打造的「{公司}」……
+msg_closed = 「{公司}」撐不下去，收掉了。
+
+# ============================================================
+#  章節、臨終、人生終章（v2.0）
+# ============================================================
+
+[life]
+chapter_label = 章節完成
+chapter_hint = 這個章節的成就已經記錄下來。要就此落幕，還是繼續人生？
+btn_end = 🎬 就此落幕
+btn_end_desc = 以這個章節作為結局，結算傳承點
+btn_continue = ▶ 繼續人生
+btn_continue_desc = 章節成就先記下來，繼續過下去，最後一起結算
+msg_chapter_again = 「{章節}」已經達成過了，人生繼續向前。
+curtain_btn = 🎬 就此落幕
+curtain_confirm = 要讓這一生在這裡落幕嗎？會以目前的人生做結算。
+msg_dying = 身體越來越虛弱，醫生說，該讓家人朋友來看看了……
+msg_wishes = 60 歲了。你在筆記本上寫下了一份遺願清單。
+msg_wish_done = 完成遺願：「{願望}」
+farewell_title = 最後的時光
+farewell_text = 病房的窗外下著小雨。{名字} 躺在床上，看著來探望的人們。
+farewell_alone = 病房裡很安靜，只有護理師偶爾進來看看。
+visit_love = {另一半}握著你的手，一句話也沒說。
+visit_kids = 孩子們都趕回來了，{孩子}紅著眼眶。
+words_title = 最後想說的話
+words1 = 「這輩子，玩得很盡興。」
+words2 = 「謝謝你們陪我走到這裡。」
+words3 = 「GG，下一局再來。」
+epitaph1 = 這輩子，玩得很盡興。
+epitaph2 = 謝謝你們陪我走到這裡。
+epitaph3 = GG，下一局再來。
+funeral_title = 告別式
+funeral_none = 告別式很簡單，來的人不多。
+epitaph_title = 墓誌銘
+
+# 遺願清單
+[wish.travel]
+name = 環遊世界
+desc = 60 歲後去旅行 3 次
+
+[wish.rival_match]
+name = 和王選手再打一場
+desc = 兩個老頭子，最後一場 1v1
+
+[wish.kid_wedding]
+name = 看孩子結婚
+desc = 親眼看著孩子步入禮堂
+
+[wish.charity]
+name = 回饋社會
+desc = 一生捐款超過 3000 萬
+
+[wish.reunion]
+name = 老友聚會
+desc = 和四位以上的開黑老朋友再聚一次
+
+[wish.memoir]
+name = 寫回憶錄
+desc = 把這一生寫下來
+
+[wish.grandkid]
+name = 抱孫子
+desc = 有一個孫子
+
+[wish.big_fish]
+name = 釣到大魚
+desc = 釣魚時釣到一條大魚
+
+[wish.eighty_five]
+name = 長命百歲
+desc = 活到 85 歲
+
+# 朋友的告別式致詞：eulogy（好友度 40 以上）、eulogy_high（70 以上）
+[npc.hu]
+eulogy = 他的錢，我幫他顧得很好。可惜這一次，沒辦法再幫他多賺一點了。
+eulogy_high = 認識他幾十年，我看過很多漲跌。他是我這輩子最好的一筆投資。
+
+[npc.haji]
+eulogy = 打遊戲的時候他老是噴我，但每次我出事，第一個打來的都是他。
+eulogy_high = 兄弟，我房貸終於繳完了，你卻先走了……下一局，換我 Carry 你。
+
+[npc.wang]
+eulogy = 我們從國中比到現在，我的對手只有他一個。
+eulogy_high = 這一生我們交手了無數次。最後一場，算你贏。賽場上見，老朋友。
+
+[npc.fang]
+eulogy = 他最愛我煮的牛肉麵。今天，我也煮了一鍋。
+eulogy_high = 幫他煮了幾十年的飯，每一餐他都說好吃。今天這一碗，我煮給你。
+
+[npc.cat]
+eulogy = 他欠我的早餐錢，我就不跟他算了。
+eulogy_high = 每天早上的蛋餅加奶茶，我還是會幫你做一份。
+
+[npc.corey]
+eulogy = 我保護過很多人，他是唯一一個會拉我一起開黑的老闆。
+eulogy_high = 這一次，我沒能擋在你前面。好好休息，剩下的交給我。
+
+[family]
+kid_names = 小宇、小晴、小恩、小安、小樂、小澄、小禾、小森、小橙、小悠
+born = 👶 {名字}出生了！
+kid_pro = {名字}在戰隊試訓中脫穎而出，成為職業選手！虎父無犬子！
+grandkid = 👶 {名字}生了孩子！你現在有 {孫子} 個孫子了。
+
+# ============================================================
+#  v2.0 行動
+# ============================================================
+
+[action.hu_chat]
+icon = 💹
+name = 找胡投顧聊投資
+desc = 請胡投顧喝咖啡、聽他分析盤勢。胡投顧好友度上升（人緣越高漲越多）。
+msg = 胡投顧講了兩個小時的總體經濟，你只聽懂一半，但他講得很開心。
+
+[action.date_fling]
+icon = 💌
+name = 偷偷約會
+desc = 和{新歡}約會，好感度 +15。小心被發現……
+
+[action.family_time]
+icon = 👨‍👧
+name = 陪伴家人
+desc = 陪另一半和孩子。常陪孩子打電動，他們長大後也許會成為職業選手。
+
+[action.sm_live]
+icon = 🔴
+name = 開台直播
+desc = 長時間開台，增加訂閱與收入。
+
+[action.sm_video]
+icon = 🎬
+name = 企劃影片
+desc = 精心製作企劃影片，訂閱成長最多，但很累。
+
+[action.sm_collab]
+icon = 🎮
+name = 找朋友聯動
+desc = 找開黑朋友一起直播，觀眾最愛看你們互噴。
+msg = 和{朋友}一起開台，聊天室刷爆了。
+
+[action.sm_sponsor]
+icon = 💼
+name = 接業配
+desc = 收入很多，但觀眾會覺得你商業化了。
+
+[action.co_tactics]
+icon = 🧠
+name = 研究戰術
+desc = 熬夜看比賽錄影、研究新戰術。
+
+[action.co_train]
+icon = 🏋️
+name = 帶新秀特訓
+desc = 隊伍實力 +3（每年會慢慢下降）。
+msg = 新秀們進步神速。
+
+[action.co_scout]
+icon = 🔍
+name = 挖角明星選手
+desc = 花錢簽下好手，隊伍實力 +5。
+msg = 簽下了一位明星選手！
+
+[action.co_mental]
+icon = 💬
+name = 心理建設
+desc = 和選手們聊聊，穩定軍心。
+
+[action.bz_store]
+icon = 🏪
+name = 巡店展店
+desc = 親自巡視、規劃展店。
+
+[action.bz_market]
+icon = 📣
+name = 行銷宣傳
+desc = 砸錢打廣告。
+
+[action.bz_hire]
+icon = 🤝
+name = 招兵買馬
+desc = 找到好的經理人。
+
+[action.bz_crunch]
+icon = 🔥
+name = 親力親為
+desc = 什麼都自己來，營運大幅提升，但身心俱疲。
+
+[action.ch_strategy]
+icon = 📊
+name = 策略會議
+desc = 和經營團隊擬定方向。
+
+[action.ch_rnd]
+icon = 🧪
+name = 投資研發
+desc = 投入 1000 萬研發新技術。
+
+[action.ch_team]
+icon = 🏆
+name = 收購電競戰隊
+desc = 花 2 億買下一支電競戰隊，從選手變成老闆。
+msg = 你成為了電競戰隊的老闆！選手們都叫你「阿維老闆」。
+
+[action.switch_job]
+icon = 🛤️
+name = 轉換跑道
+desc = 年度結算時重新選擇第二幕的工作（實況主、教練、創業、退休）。
+
+[action.travel]
+icon = ✈️
+name = 出國旅行
+desc = 去看看沒看過的風景。
+
+[action.fishing]
+icon = 🎣
+name = 釣魚
+desc = 坐在海邊，什麼都不想。
+msg_big = 釣到一條超大的魚！
+
+[action.elder_squad]
+icon = 👴
+name = 老人開黑團
+desc = 和老朋友們一起打遊戲，手速慢了，嘴砲沒變。
+
+[action.charity]
+icon = 💝
+name = 做公益
+desc = 捐出一成存款（最少 100 萬）。
+msg = 捐出 {金額}，收到好多感謝卡。
+
+[action.walk]
+icon = 🚶
+name = 散步健身
+desc = 每天走一萬步。
+
+[action.memoir]
+icon = 📖
+name = 寫回憶錄
+desc = 把這一生的故事寫下來。
+
+[action.checkup]
+icon = 🩺
+name = 全身健康檢查
+desc = 健康 +8，今年比較不容易出意外。
+msg = 醫生說你保養得很好。
+
+# ============================================================
+#  v2.0 事件
+# ============================================================
+
+[event.love_tempt]
+icon = 💘
+title = 危險的邂逅
+text = 有人向你告白了。你明明已經有{另一半}了……
+choice1 = 偷偷交往
+success1 = 你開始了危險的雙重生活。
+fail1 = 對方知道你有對象，轉身就走了。
+choice2 = 婉拒，我有{另一半}了
+result2 = 回家後，你抱了{另一半}一下。
+
+[event.love_shura]
+icon = 🌋
+title = 修羅場
+text = {另一半}拿著你的手機，螢幕上是{新歡}傳來的訊息。空氣凝結了。
+choice1 = 坦白一切，誠心道歉
+success1 = {另一半}哭了很久，最後選擇原諒你。你和其他人斷得一乾二淨。
+fail1 = 「我們結束了。」所有人都離開了你。
+choice2 = 選擇{另一半}
+result2 = 你和其他人斷了聯絡。{另一半}原諒了你，但心裡有了裂痕。
+choice3 = 選擇{新歡}
+result3 = 你和{另一半}分開了，和{新歡}正式在一起。
+choice4 = 全部放手
+result4 = 一個人坐在空蕩蕩的房間裡，你知道這是自己造成的。
+
+[event.baby]
+icon = 🍼
+title = 新生命
+text = {另一半}輕聲問你：「我們要不要生個孩子？」
+choice1 = 好！
+result1 =
+choice2 = 再等等
+result2 = 「好吧，等你準備好。」
+
+[event.kid_first_game]
+icon = 🕹️
+title = 孩子的第一場遊戲
+text = 孩子拿起你的滑鼠，眼睛發亮：「爸爸，教我玩！」
+choice1 = 手把手教他 FPS
+result1 = 才玩一下午，他就打出了一次爆頭。你彷彿看到了小時候的自己。
+choice2 = 讓他自由發展
+result2 = 他跑去玩積木了。也好。
+
+[event.kid_rebel]
+icon = 😤
+title = 叛逆期
+text = 孩子摔門大喊：「你根本不懂我！」
+choice1 = 好好談一談
+success1 = 聊到半夜，你們終於打開心結。他說：「其實我很崇拜你。」
+fail1 = 越談越僵，他把自己關在房間裡。
+choice2 = 沒收電腦
+result2 = 你想起了自己小時候，電腦被爸媽沒收的那一天。
+
+[event.kid_college]
+icon = 🎓
+title = 孩子上大學了
+text = 送孩子去大學宿舍，回程的車上，你和{另一半}都沒說話。
+result = 學費、生活費花了 20 萬，但心裡很驕傲。
+
+# 專屬變數：{新人}
+[event.kid_wedding]
+icon = 💒
+title = 孩子的婚禮
+text = {新人}要結婚了！
+choice1 = 包個大紅包（100 萬）
+result1 = 你在婚禮上致詞，講到一半哽咽了。
+choice2 = 簡單祝福
+result2 = 看著{新人}牽起另一半的手，你覺得這一生值得了。
+
+[event.midlife_crisis]
+icon = 🌀
+title = 中年危機
+text = 某天早上照鏡子，你發現自己有白頭髮了。人生，就這樣了嗎？
+choice1 = 買一台超跑（800 萬）
+result1 = 油門踩下去的那一刻，你覺得自己又 25 歲了。
+choice2 = 重拾遊戲，再戰排位
+result2 = 手感還在！一路從白銀打回了鑽石。
+choice3 = 報名老將復出賽
+success3 = 老將復出，一路打進決賽！直播觀看數破紀錄，大家都說「老兵不死」。
+fail3 = 第一輪就被小朋友打爆了……腰也閃到了。
+
+[event.hall_of_fame]
+icon = 🏛️
+title = 電競名人堂
+text = 你接到一通電話：你被選入台灣電競名人堂。
+result = 典禮上，台下坐滿了當年的隊友和粉絲。
+
+[event.farewell_match]
+icon = 🎤
+title = 退役告別賽
+text = 退役告別賽，對手是——王選手。台下坐滿了觀眾。
+choice1 = 全力一戰
+success1 = 最後一局，你打出了生涯最漂亮的操作。王選手笑著和你擁抱。
+fail1 = 王選手沒有放水。賽後他說：「這是對你最大的尊重。」
+choice2 = 這場就交給回憶
+result2 = 你們把比賽打成一場表演賽，全場笑聲不斷。
+
+[event.stream_flame]
+icon = 🔥
+title = 直播炎上
+text = 直播時說錯一句話，被剪成短影片瘋傳，留言區一片罵聲。
+choice1 = 開台道歉
+result1 = 你誠懇道歉，風波慢慢平息。
+choice2 = 硬拗到底
+success2 = 你用幽默化解了危機，反而圈了一波粉。
+fail2 = 越描越黑，大量觀眾退訂……
+
+[event.stream_donate]
+icon = 💸
+title = 抖內大戶
+text = 一位神秘觀眾一口氣抖內了 50 萬，留言：「謝謝你陪我度過最難熬的日子。」
+result = 你在鏡頭前愣了好久。
+
+[event.stream_wang]
+icon = 🎯
+title = 和王選手連線
+text = 王選手開直播打到一半，突然傳訊息給你：「上來連線，觀眾想看我們對決！」
+result = 兩位老對手連線打娛樂賽，聊天室被洗版，觀看人數衝上平台第一。
+
+[event.coach_rookie]
+icon = 🌟
+title = 天才新秀
+text = 試訓時，一個 16 歲的新秀打出了驚人的數據。你好像看到了當年的自己。
+choice1 = 重點培養
+result1 = 你把自己的經驗全部傳授給他。
+choice2 = 先觀察一陣子
+result2 = 不急，好的選手需要時間。
+
+[event.coach_rival]
+icon = 🔥
+title = 教練的較勁
+text = 王選手執教的隊伍放話：「這季的冠軍是我們的。」（對戰成績 {宿敵戰績}）
+choice1 = 在記者會上回嗆
+result1 = 「叫他先贏過我再說。」記者們都笑了。
+choice2 = 默默研究他的戰術
+result2 = 你熬夜看了他所有的比賽。
+
+# 專屬變數：{合夥人}
+[event.biz_partner]
+icon = 🤝
+title = 合夥人的點子
+text = {合夥人}半夜打電話來：「我想到一個新菜單，一定會爆紅！」
+result = 新品推出後大受好評，店裡排起了長長的隊伍。
+
+[event.biz_crisis]
+icon = ⚠️
+title = 經營危機
+text = 店裡被客訴上了新聞，網路上一片負評。
+choice1 = 暫停營業，徹底整頓
+result1 = 少賺了一些，但口碑保住了。
+choice2 = 正面回應，繼續營業
+success2 = 你親自道歉、改善流程，反而贏得了顧客的信任。
+fail2 = 回應得不好，負評越滾越大……
+
+[event.hostile_takeover]
+icon = 🦈
+title = 惡意併購
+text = 有財團在市場上大量收購公司股票，想要奪走經營權。
+choice1 = 正面迎戰
+success1 = 你聯合老股東成功擊退財團（胡投顧也出了不少力）。
+fail1 = 雖然守住了經營權，但公司元氣大傷。
+choice2 = 花錢和解（2000 萬）
+result2 = 花錢消災，至少公司保住了。
+
+[event.own_team]
+icon = 🏆
+title = 你的戰隊
+text = 你收購的電競戰隊打進了世界賽，你坐在觀眾席最前排。
+result = 選手們賽後衝過來和你擁抱：「老闆，謝謝你！」
+
+# 專屬變數：{朋友}
+[event.old_friend_visit]
+icon = ☕
+title = 老朋友來訪
+text = {朋友}提著水果來看你：「好久不見，最近好嗎？」
+result = 你們聊起了以前在網咖開黑的日子，笑到停不下來。
+
+[event.elder_fall]
+icon = 🩹
+title = 跌倒了
+text = 洗澡時不小心滑了一跤。
+result = 骨頭沒斷，但得休養好一陣子。
+
+[event.elder_hospital]
+icon = 🏥
+title = 住院
+text = 身體出了狀況，醫生建議住院治療。
+choice1 = 好好治療（100 萬）
+result1 = 住了一個月，出院時精神好多了。
+choice2 = 回家休養
+result2 = 你不想待在醫院，回家慢慢養。
+
+[event.elder_grandkids]
+icon = 🧸
+title = 孫子來玩
+text = 孫子們跑進來：「爺爺！教我打電動！」
+result = 你把手把交給他們，看著他們在螢幕前大叫，笑得合不攏嘴。
+
+[event.charity_thanks]
+icon = 💌
+title = 一封感謝信
+text = 你資助的學生寄來一封信：「我考上大學了，謝謝您。」
+result = 你把信收進抽屜，和那些獎盃放在一起。
+
+[event.wish_reunion]
+icon = 🍻
+title = 老友聚會
+text = 群組裡有人說：「好久沒聚了，這週末一起吃飯吧！」老朋友們全都到齊了。
+result = 哈基咩還是打得很爛，你還是會噴他。有些東西，一輩子都不會變。
+
+[event.wish_wang]
+icon = 🎯
+title = 最後一場 1v1
+text = 王選手提著鍵盤來你家：「我們都老了。來，最後一場。」
+choice1 = 全力以赴
+success1 = 你贏了。王選手大笑：「好啦，這一輩子算你贏。」
+fail1 = 你輸了。王選手拍拍你的肩：「這一輩子，能跟你當對手真好。」
+choice2 = 一起打電腦就好
+result2 = 你們沒有打 1v1，而是一起組隊，像國中時一樣。
+
+# ============================================================
+#  v2.0 結局
+#  人生終章有兩個版本：text_dead（過世）、text_alive（在第二幕自己落幕）
+# ============================================================
+
+[ending.champ_coach]
+icon = 📋
+name = 冠軍教練
+text = 從選手到教練，{名字} 再一次站上世界的頂點。這一次，捧起獎盃的是他帶出來的孩子們。他在場邊笑著，比當年自己奪冠時還要開心。
+
+[ending.mega_streamer]
+icon = 📺
+name = 百萬訂閱實況主
+text = 訂閱數突破一百萬的那一刻，聊天室被洗版了整整十分鐘。{名字} 對著鏡頭說：「謝謝大家，我們明天同一時間見。」
+
+[ending.tycoon]
+icon = 💼
+name = 商業大亨
+text = 敲鐘的那一刻，{名字} 想起了當年在網咖打排位的自己。誰想得到，那個只會打電動的孩子，有一天會成為商業大亨。
+
+[ending.peaceful]
+icon = 🌅
+name = 安詳離世
+text_dead = {年齡} 歲，{名字} 在睡夢中安詳地離開了。他的一生有輸有贏，有笑有淚，就像一場打得很盡興的遊戲。
+text_alive = {年齡} 歲的 {名字} 坐在搖椅上，看著夕陽。這一生有輸有贏，有笑有淚，他覺得已經夠了。
+
+[ending.family]
+icon = 👨‍👩‍👧
+name = 兒孫滿堂
+text_dead = {名字} 走的那天，病房裡擠滿了家人。孫子們不知道發生了什麼事，只記得爺爺總是會陪他們打電動。
+text_alive = 過年的時候，{名字} 家裡擠滿了兒孫。孫子們圍著他：「爺爺，再教我們一招！」
+
+[ending.legend]
+icon = 👑
+name = 傳奇人生
+text_dead = {年齡} 歲，傳奇落幕。{名字} 的名字被寫進了歷史——在賽場上，在商場上，也在每一個朋友的心裡。
+text_alive = {名字} 的一生，被寫成了書、拍成了電影。有人問他成功的祕訣，他笑著說：「就是一直玩下去而已。」
+
+[ending.centenarian]
+icon = 🎂
+name = 百歲人瑞
+text_dead = 一百歲生日過後不久，{名字} 安詳地離開了。他是全台灣年紀最大的玩家，直到最後都還在打排位。
+text_alive = 一百歲生日那天，{名字} 吹熄蠟燭，許的願望是：「再打一場。」
+
+[ending.lonely]
+icon = 🥀
+name = 孤獨終老
+text_dead = {名字} 走的時候，身邊沒有人。整理遺物時，人們找到一張泛黃的照片——一群少年在網咖裡笑得很開心。
+text_alive = 偌大的房子裡只有 {名字} 一個人。他打開電腦，好友清單裡的名字都是灰色的。
+
+# ============================================================
+#  v2.0 成就
+# ============================================================
+
+[achievement.second_act]
+icon = 🛤️
+name = 人生第二幕
+desc = 完成一個章節後選擇繼續人生
+
+[achievement.dynasty]
+icon = 👑
+name = 王朝
+desc = 拿下 3 座世界冠軍
+
+[achievement.champ_coach]
+icon = 📋
+name = 冠軍教練
+desc = 以教練身分拿下世界冠軍
+
+[achievement.top_streamer]
+icon = 📺
+name = 年度實況主
+desc = 在平台年度盛典拿下第一
+
+[achievement.tycoon]
+icon = 💼
+name = 商業大亨
+desc = 創業掛牌上市，或把公司打造成科技帝國
+
+[achievement.double_crown]
+icon = 🏆
+name = 雙冠人生
+desc = 同一生拿下世界冠軍，又成為大老闆或商業大亨
+
+[achievement.comeback]
+icon = 🔥
+name = 東山再起
+desc = 被董事會趕下台後，重新創業成為商業大亨
+
+[achievement.hall_of_fame]
+icon = 🏛️
+name = 名人堂
+desc = 入選電競名人堂
+
+[achievement.old_soldier]
+icon = 🎖️
+name = 老兵不死
+desc = 中年報名老將復出賽並打進決賽
+
+[achievement.team_owner]
+icon = 🏟️
+name = 戰隊老闆
+desc = 收購一支電競戰隊
+
+[achievement.time_master]
+icon = ⏰
+name = 時間管理大師
+desc = 同時和三個人交往
+
+[achievement.shura]
+icon = 🌋
+name = 修羅場
+desc = 同時交往被抓包
+
+[achievement.prodigal]
+icon = 💍
+name = 浪子回頭
+desc = 經歷過修羅場，最後還是結了婚
+
+[achievement.parent]
+icon = 🍼
+name = 當爸爸了
+desc = 有了第一個孩子
+
+[achievement.tiger_son]
+icon = 🐯
+name = 虎父無犬子
+desc = 孩子成為職業選手
+
+[achievement.grandparent]
+icon = 🧸
+name = 含飴弄孫
+desc = 抱到孫子
+
+[achievement.philanthropist]
+icon = 💝
+name = 慈善家
+desc = 一生捐款超過 3000 萬
+
+[achievement.wishes_all]
+icon = 📝
+name = 了無遺憾
+desc = 完成遺願清單上的所有願望
+
+[achievement.centenarian]
+icon = 🎂
+name = 百歲人瑞
+desc = 活到 100 歲
+
+[achievement.life_winner]
+icon = 🌟
+name = 人生贏家
+desc = 達成「傳奇人生」結局
+
+# ---------- v2.0 其他 ----------
+[rival]
+msg_defend = 👑 衛冕成功！又一座世界冠軍入袋！
+
+[love]
+fling_start = 💌 你和{新歡}偷偷交往了……
+fling_leave = {新歡}受不了你總是忽冷忽熱，離開了。
+
+# ---------- v2.0：王選手、交往 ----------
+
+# 專屬變數：{賭金}
+[event.wang_casino]
+icon = 🎲
+title = 王選手的邀約
+text = 王選手傳來訊息：「走啦，今天手感超好，帶你去贏一把！」你知道他上個月才輸掉半個月薪水……（賭金 {賭金}）
+choice1 = 一起梭哈
+success1 = 王選手押什麼你就跟什麼，竟然真的贏了！他得意地說：「我就說今天手感很好。」
+fail1 = 王選手說「再一把就翻本」說了十次，你們兩個都輸到脫褲。
+choice2 = 陪他去，但自己不賭
+result2 = 你在旁邊看他大呼小叫了一整晚。
+lend = 散場時他抓著你：「借我 5 萬，下禮拜還你。」你嘆了口氣，還是借了。
+choice3 = 拒絕他
+result3 = 「沒義氣！」王選手一個人去了。
+
+[event.love_paparazzi]
+icon = 📸
+title = 狗仔拍到約會
+text = 你和{另一半}約會的照片被登上了八卦版：「電競新星 {名字} 熱戀中！」
+choice1 = 大方公開戀情
+result1 = 粉絲們一片祝福，{另一半}也很開心你願意公開。
+choice2 = 否認到底
+success2 = 新聞很快就被其他八卦蓋過去了。
+fail2 = {另一半}看到你在記者會上否認，難過了好幾天……
+
+# ---------- v2.0：朋友事件（追加） ----------
+
+[event.wang_broke]
+icon = 💸
+title = 王選手又輸光了
+text = 半夜兩點，王選手打來：「兄弟……我又輸光了，房租繳不出來，可以先借我 20 萬嗎？」
+choice1 = 借他 20 萬
+result1 = 「我發誓這是最後一次！」——你已經聽他說過很多次了。
+choice2 = 拒絕
+result2 = 「好啦，我再想辦法。」他的聲音聽起來很失落。
+choice3 = 勸他戒賭
+success3 = 你們聊到天亮。王選手終於點頭：「好，我戒。這次是真的。」
+fail3 = 「我只是運氣不好而已！」他掛了電話。
+
+[event.wang_repay]
+icon = 💰
+title = 王選手的那筆錢
+text = 三年前借給王選手的 20 萬……
+msg_pay = 王選手把錢拿來了，還多請你吃了一頓燒肉：「說好的，一毛不少！」
+msg_nopay = 王選手每次都說「下個月」。你決定，這筆錢就當作沒借過吧。
+
+[event.haji_mortgage_done]
+icon = 🍾
+title = 哈基咩繳完房貸了
+text_normal = 哈基咩在群組裡傳了一張照片：銀行的清償證明。「三十年！老子終於繳完了！今晚我請客！」
+text_lent = 哈基咩在群組裡傳了一張清償證明，然後私訊你：「當年要不是你借我那 30 萬，這間房子早就沒了。今晚我請客，你坐主位。」
+result = 大家喝到半夜，哈基咩一直說「我是有房子的人了」，說了二十幾次。
+
+[event.haji_promotion]
+icon = 🏛️
+title = 哈基咩升官了
+text = 哈基咩升上科長了！他請大家去吃熱炒，臉上的笑容藏都藏不住。
+choice1 = 「科長還是一樣送頭吧？」
+result1 = 全桌笑翻。哈基咩：「上班是科長，打電動還是你的小弟啦。」
+choice2 = 舉杯真心恭喜他
+result2 = 哈基咩眼眶有點紅：「謝啦，兄弟。」
+
+[event.fang_tv]
+icon = 🍽️
+title = 阿方上美食節目
+text = 阿方受邀參加電視上的廚藝大賽，緊張到前一晚睡不著，傳訊息問你會不會來。
+choice1 = 去現場幫他加油
+result1 = 你在台下舉著「阿方必勝」的牌子，阿方看到後笑了出來，最後拿下了第二名。
+choice2 = 在家開直播幫他宣傳
+result2 = 你的觀眾湧進節目的留言區刷「阿方加油」，節目組都嚇到了。
+
+[event.fang_star]
+icon = ⭐
+title = 阿方的餐廳摘星了
+text = 你當年投資的那間餐廳，拿到了美食評鑑的星級肯定！阿方打電話來，聲音都在發抖。
+result = 股東分紅 200 萬入帳。阿方邀你坐在主桌，親自為你做了一整套菜。
+
+[event.cat_busted]
+icon = 🚨
+title = 代練被抓包
+text = 長長貓的代練帳號被官方抓到，客戶名單在網路上流傳——你的名字也在上面。
+choice1 = 站出來幫他澄清
+result1 = 你公開說明是自己找他代練的，網友罵了你幾天，但長長貓說他這輩子都會記得。
+choice2 = 撇清關係
+result2 = 你說自己帳號被盜。長長貓已讀不回了好一陣子。
+
+[event.cat_branch]
+icon = 🥪
+title = 長長貓開分店
+text = 長長貓的早餐店生意好到排隊，他準備開第二家分店：「要不要一起當股東？100 萬就好。」
+choice1 = 入股 100 萬
+success1 = 分店也天天排隊，一年後你拿回了 200 萬！
+fail1 = 分店開在不好的地段，撐了一年就收了。長長貓很過意不去。
+choice2 = 去幫他剪綵
+result2 = 你穿著西裝去剪綵，長長貓穿著圍裙站在旁邊，畫面很好笑，但大家都很開心。
+
+[event.corey_hero]
+icon = 🦸
+title = Corey 見義勇為
+text = 新聞快報：一名男子在捷運上當場制伏扒手——畫面裡的人，正是 Corey。
+result = 記者問他平常喜歡做什麼，Corey 說：「跟朋友打電動。」群組裡大家笑成一團，一起替他驕傲。
+
+# 專屬變數：{朋友}
+[event.friend_wedding]
+icon = 💒
+title = 朋友的婚禮
+text = {朋友}要結婚了！他拜託你當伴郎，還要上台致詞。
+choice1 = 上台致詞
+success1 = 你講了你們一起開黑的糗事，全場笑翻又感動，新娘都哭了。
+fail1 = 你太緊張，把新娘的名字唸錯了……全場大笑，{朋友}笑到差點站不住。
+choice2 = 包個大紅包（6.6 萬）
+result2 = {朋友}看到紅包袋的厚度，愣了一下，然後用力抱住你。
+
+# 專屬變數：{金額}
+[event.hu_crash]
+icon = 📉
+title = 胡投顧的股災
+text = 股市一天狂跌，胡投顧罕見地在群組裡沉默了一整天。後來他私訊你：「這次我也虧了不少。」
+choice1 = 約他出來喝一杯
+result1 = 胡投顧講了一晚上的總經和人生，最後說：「謝謝你，還好有你這個朋友。」
+choice2 = 趁低點加碼（{金額}）
+success2 = 你在最低點進場，半年後大漲，胡投顧都說你是天才。
+fail2 = 低點下面還有更低點……你和胡投顧一起看著帳戶發呆。
 `);

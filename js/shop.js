@@ -15,7 +15,11 @@
     owned(s, id) { return !!this.items(s)[id]; },
     price(s, it) { return AW.val(it.price, s); },
     // 實際要付的錢（房子只付頭期款）
-    cost(s, it) { const p = this.price(s, it); return it.loan ? Math.round(p * it.loan.down) : p; },
+    cost(s, it) {
+      const p = this.price(s, it);
+      // 婚後（或訂婚）買房，另一半會分擔頭期款
+      return it.loan ? Math.round(p * it.loan.down * (1 - AW.Love.houseShare(s))) : p;
+    },
 
     state(s, it) {
       if (it.stages && !it.stages.includes(AW.Engine.stageKey(s))) return fail('', true);
@@ -49,7 +53,11 @@
       const p = this.cost(s, it);
       const deltas = AW.applyEffects(s, { money: -p });
       s.counters.spent = (s.counters.spent || 0) + p;
-      if (it.loan) AW.Finance.addLoan(s, it.id, this.price(s, it) - p, it.loan.rate, it.loan.years);
+      if (it.loan) {
+        const full = this.price(s, it);
+        AW.Finance.addLoan(s, it.id, full - Math.round(full * it.loan.down), it.loan.rate, it.loan.years);
+        if (AW.Love.houseShare(s)) AW.Engine.addLog(s, '💕', AW.tx('love', 'msg_house', s, { 金額: AW.fmtMoney(Math.round(full * it.loan.down) - p) }));
+      }
       const items = this.items(s);
       if (it.type === 'gear') { items[it.id] = 1; s.itemSince[it.id] = s.age; }
       else if (it.type === 'charm') items.charm = (items.charm || 0) + 1;
@@ -135,23 +143,48 @@
 
   const Casino = (AW.Casino = {
     MIN_AGE: 18,
-    MAX_PLAYS: 10,
+    // 每年次數上限：骰寶＋拉霸合計 table 次，彩券另外 lotto 次（買 1 張或 10 張都算一次）
+    MAX_PLAYS: { table: 10, lotto: 10 },
     BETS: [1000, 10000, 100000, 1000000, 10000000],
     SYMBOLS, DICE, LOTTERY,
 
-    plays(s) { return s.yearFlags.gamble || 0; },
-    state(s) {
+    kindOf(game) { return game === 'lottery' ? 'lotto' : 'table'; },
+    plays(s, kind) { return (kind === 'lotto' ? s.yearFlags.lotto : s.yearFlags.gamble) || 0; },
+    left(s, kind) { return Math.max(0, this.MAX_PLAYS[kind] - this.plays(s, kind)); },
+    // 能不能進賭場（不看次數）
+    canEnter(s) {
       if (!Shop.open(s)) return fail('現在不能去賭場');
       if (s.age < this.MIN_AGE) return fail(`${this.MIN_AGE} 歲才能進賭場`);
       if (s.flags.noGamble) return fail('你已經戒賭了');
-      if (this.plays(s) >= this.MAX_PLAYS) return fail('今年玩夠了，保全請你明年再來');
+      return { ok: true };
+    },
+    state(s, kind) {
+      const st = this.canEnter(s);
+      if (!st.ok) return st;
+      kind = kind || 'table';
+      if (!this.left(s, kind)) return fail(kind === 'lotto' ? '今年的彩券買夠了，明年再來' : '今年玩夠了，保全請你明年再來');
       if (s.stats.money < 1000) return fail('身上的錢不夠下注');
       return { ok: true };
+    },
+    // 進出賭場：一次進場不管玩幾把，只算一次
+    enter(s) { s.casinoSession = false; },
+    // 事件中的賭局：算一次進場，不佔每年次數；回傳金錢變化
+    record(s, net) {
+      const c = s.counters;
+      const y = s.yearFlags;
+      c.casinoVisits = (c.casinoVisits || 0) + 1;
+      y.casinoVisits = (y.casinoVisits || 0) + 1;
+      c.gamblePlays = (c.gamblePlays || 0) + 1;
+      c.gambleNet = (c.gambleNet || 0) + net;
+      if (net > 0) { c.gambleWon = (c.gambleWon || 0) + net; y.gambleWon = (y.gambleWon || 0) + net; }
+      if (net < 0) { c.gambleLost = (c.gambleLost || 0) - net; y.gambleLost = (y.gambleLost || 0) - net; }
+      if (net >= 1000000) s.flags.bigWin = 1;
+      return { deltas: AW.applyEffects(s, { money: net }) };
     },
 
     // game: dice（pick: big/small）、slots；bet: 金額或 'all'
     play(s, game, bet, pick) {
-      if (!this.state(s).ok) return null;
+      if (!this.state(s, 'table').ok) return null;
       const money = s.stats.money;
       bet = bet === 'all' ? money : Math.round(Number(bet) || 0);
       if (bet < 1000 || bet > money) return null;
@@ -182,7 +215,7 @@
     lottery(s, n) {
       n = n === 10 ? 10 : 1;
       const cost = LOTTERY.price * n;
-      if (!this.state(s).ok || s.stats.money < cost) return null;
+      if (!this.state(s, 'lotto').ok || s.stats.money < cost) return null;
       const money = s.stats.money;
       let win = 0;
       const hits = {};
@@ -201,9 +234,20 @@
     },
 
     settle(s, r, before) {
-      s.yearFlags.gamble = this.plays(s) + 1;
-      s.counters.gamblePlays = (s.counters.gamblePlays || 0) + 1;
-      s.counters.gambleNet = (s.counters.gambleNet || 0) + r.net;
+      const y = s.yearFlags;
+      const c = s.counters;
+      if (r.game === 'lottery') y.lotto = this.plays(s, 'lotto') + 1;
+      else y.gamble = this.plays(s, 'table') + 1;
+      if (!s.casinoSession) {
+        s.casinoSession = true;
+        c.casinoVisits = (c.casinoVisits || 0) + 1;
+        y.casinoVisits = (y.casinoVisits || 0) + 1;
+      }
+      c.gamblePlays = (c.gamblePlays || 0) + 1;
+      c.gambleNet = (c.gambleNet || 0) + r.net;
+      // 贏、輸分開記（一生與今年）
+      if (r.net > 0) { c.gambleWon = (c.gambleWon || 0) + r.net; y.gambleWon = (y.gambleWon || 0) + r.net; }
+      if (r.net < 0) { c.gambleLost = (c.gambleLost || 0) - r.net; y.gambleLost = (y.gambleLost || 0) - r.net; }
       let mood = r.net > 0 ? 4 : r.net < 0 ? -3 : 0;
       if (r.net < 0 && -r.net >= before / 2 && -r.net >= 50000) mood = -12;
       r.deltas = AW.applyEffects(s, { money: r.net, mood });

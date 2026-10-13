@@ -52,6 +52,7 @@
     teamwork: { name: '團隊默契',      short: '默契', icon: '🤝', kind: 'skill' },
     tech:     { name: '技術力',        short: '技術', icon: '💻', kind: 'skill' },
     leader:   { name: '領導力',        short: '領導', icon: '👔', kind: 'skill' },
+    tactics:  { name: '戰術',          short: '戰術', icon: '🧠', kind: 'skill' },
     health:   { name: '健康',          short: '健康', icon: '❤️', kind: 'cond' },
     mood:     { name: '心情',          short: '心情', icon: '😊', kind: 'cond' },
     love:     { name: '好感度',        short: '好感', icon: '💗', kind: 'cond' },
@@ -85,6 +86,7 @@
     if (g.all && key !== 'fame') m *= 1 + g.all;
     if (g.game && (key === 'fps' || key === 'dota')) m *= 1 + g.game;
     if (AW.Shop) m *= 1 + AW.Shop.bonus(s, 'growth', key);
+    if (AW.Love && key !== 'fame') m *= 1 + AW.Love.growthBonus(s, key);
     m *= 1 + 0.04 * (s.memory || 0);
     if (key === 'reflex' && s.age < 12) m *= 1.3;
     if ((key === 'fps' || key === 'dota') && s.age >= 6 && s.age <= 15) m *= 1.15;
@@ -99,7 +101,7 @@
   // 健康／心情狀態門檻：≥ good 良好、< low 低落、< bad 危險
   AW.TIER = { good: 70, low: 40, bad: 20 };
   // 擲骰修正：健康好 +5%、心情差 -5%
-  AW.rollMod = (s) => (s.stats.health >= AW.TIER.good ? 0.05 : 0) - (s.stats.mood < AW.TIER.low ? 0.05 : 0);
+  AW.rollMod = (s) => (s.stats.health >= AW.TIER.good ? 0.05 : 0) - (s.stats.mood < AW.TIER.low ? 0.05 : 0) + (AW.Love ? AW.Love.rollBonus(s) : 0);
   // 目前的狀態標籤（文字在 texts.js 的 [status]）
   AW.statusList = (s) => {
     const out = [];
@@ -112,6 +114,10 @@
     else if (m < AW.TIER.bad) out.push('depressed');
     else if (m < AW.TIER.low) out.push('low');
     if (s.flags.chronic) out.push('chronic');
+    // 感情：熱戀、冷淡
+    const lt = AW.Love ? AW.Love.tier(s) : '';
+    if (lt === 'passion') out.push('passion');
+    else if (lt === 'cold') out.push('cold');
     return out;
   };
 

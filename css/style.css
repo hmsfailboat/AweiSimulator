@@ -414,3 +414,21 @@ em.down { color: var(--bad); }
 .m-tag { color: var(--warn); font-size: .72rem; }
 .peer-table { background: var(--card2); border-radius: 8px; padding: .3em .7em; font-size: .86rem; }
 .peer-table .me { color: var(--accent); font-weight: 700; }
+.casino-stats { display: flex; flex-wrap: wrap; gap: .3em 1em; background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: .45em .8em; margin: .6em 0; font-size: .88rem; }
+
+/* ---------- v2.0：章節、第二幕、臨終、告別式 ---------- */
+.family-box { display: flex; flex-wrap: wrap; gap: .3em; margin: .4em 0; }
+.wishes { background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: .4em .7em; margin: .4em 0; font-size: .82rem; }
+.wishes summary { cursor: pointer; font-weight: 600; }
+.wishes .c-row.ok { color: var(--ok); }
+.c-row.small { font-size: .82rem; }
+.chapter .choices .btn.choice { min-width: 12em; }
+.farewell { text-align: center; }
+.farewell .notes { text-align: left; max-width: 32em; margin: .8em auto; }
+.funeral .eulogy { display: flex; gap: .7em; align-items: flex-start; padding: .5em 0; border-bottom: 1px dashed var(--line); }
+.funeral .eulogy p { margin: .2em 0 0; color: #cfd3ea; }
+.epitaph { text-align: center; margin: 1em auto .3em; padding: 1em; max-width: 22em; border: 1px solid var(--line); border-radius: 12px 12px 4px 4px; background: linear-gradient(180deg, #23283f, #171b2b); }
+.epitaph div { font-weight: 800; font-size: 1.15rem; margin: .2em 0; }
+.epitaph p { margin: 0; color: var(--muted); font-style: italic; }
+.k-tactics { background: linear-gradient(90deg, #8b5cf6, #c4b5fd); }
+.love-type { cursor: help; font-size: .72rem; padding: .05em .5em; }

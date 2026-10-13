@@ -78,7 +78,7 @@
       table.sort((a, b) => b.v - a.v || (a.me ? -1 : b.me ? 1 : 0));
       const place = table.findIndex((r) => r.me) + 1;
       const top = place === 1;
-      stages.push({ name: AW.tx('office', 'stage_peers', s), icon: '📊', matches: [], table, passed: top,
+      stages.push({ name: AW.tx('office', 'stage_peers', s), icon: '📊', matches: [], table, prefix: 'KPI ', passed: top,
         note: AW.tx('office', top ? 'note_top' : 'note_place', s, { 名次: place }) });
 
       // 升遷：點數與能力都達標 → 答辯（升 CEO 改為董事會投票）

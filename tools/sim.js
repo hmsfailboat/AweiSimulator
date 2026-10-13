@@ -1,6 +1,7 @@
 /* 無頭平衡模擬：node tools/sim.js [局數]
  * 以數種策略自動遊玩，輸出成年檢定與職涯結果分佈。
  * node tools/sim.js --meta [輪數]：從零開始連續重生，有傳承點就買，統計幾局能全部解鎖。
+ * node tools/sim.js --short：每個章節都選「就此落幕」（等同 v1 的玩法）；預設會繼續人生到過世。
  * SIM_HOOK=除錯腳本.js node tools/sim.js：載入除錯腳本，可替換或監看任何函式。
  */
 'use strict';
@@ -11,7 +12,7 @@ const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const FILES = ['js/core.js', 'js/text.js', 'js/data/texts.js', 'js/data/traits.js', 'js/data/actions.js', 'js/data/events.js',
   'js/data/items.js', 'js/data/npcs.js', 'js/data/meta.js', 'js/engine.js', 'js/love.js', 'js/shop.js', 'js/finance.js',
-  'js/npcs.js', 'js/office.js', 'js/esports.js', 'js/engineer.js'];
+  'js/npcs.js', 'js/office.js', 'js/family.js', 'js/second.js', 'js/esports.js', 'js/engineer.js'];
 const ctx = { console, Math, Date, JSON };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
@@ -35,6 +36,7 @@ AW.Meta.data = AW.Meta.defaults();
 AW.Meta.save = () => {};
 
 const META = process.argv.includes('--meta');
+const SHORT = process.argv.includes('--short');
 const N = +process.argv.filter((a) => !a.startsWith('--'))[2] || (META ? 200 : 2000);
 const R = Math.random;
 
@@ -44,9 +46,9 @@ function pickActions(s, prefs, grind) {
   const out = [];
   const st = s.stats;
   const need = [];
-  if (!grind && st.health < 45) need.push('rest', 'pro_rest', 'uni_rest', 'vacation', 'gym', 'sports');
-  if (!grind && st.mood < 50) need.push('rest', 'pro_rest', 'uni_game', 'vacation', 'friends');
-  if (AW.Love.active(s) && st.love < 50) need.push('date');
+  if (!grind && st.health < 45) need.push('rest', 'pro_rest', 'uni_rest', 'vacation', 'gym', 'sports', 'walk', 'checkup');
+  if (!grind && st.mood < 50) need.push('rest', 'pro_rest', 'uni_game', 'vacation', 'friends', 'fishing', 'travel');
+  if (AW.Love.active(s) && st.love < 70) need.push('date');
   for (const id of need.concat(prefs(s))) {
     if (out.length >= n) break;
     if (avail.includes(id) && !out.includes(id)) out.push(id);
@@ -124,14 +126,34 @@ const engPrefs = (s) => {
   return st.leader < 85 ? ['mentor', 'networking', 'crossteam'] : ['networking', 'crossteam', 'code'];
 };
 
+// 第二幕
+const secondPrefs = (s) => {
+  const job = AW.Engine.stageKey(s);
+  return {
+    streamer: ['sm_video', 'sm_live', 'sm_collab'],
+    coach: ['co_tactics', 'co_train', 'co_scout'],
+    biz: ['bz_store', 'bz_hire', 'bz_market'],
+    chairman: ['ch_strategy', 'bz_hire', 'ch_rnd'],
+    retired: ['walk', 'fishing', 'family_time', 'travel', 'elder_squad'],
+    elder: ['walk', 'family_time', 'checkup', 'fishing', 'travel'],
+  }[job] || [];
+};
+// 第二幕的抉擇：隨機選一個能選的（不選「維持現狀」）
+function pickDecision(s) {
+  const d = s.decision;
+  if (d.type !== 'second') return 0;
+  const ok = d.options.map((o, i) => ({ o, i })).filter((x) => !x.o.disabled && x.o.label !== AW.tx('second', 'opt_stay'));
+  return ok.length ? ok[Math.floor(R() * ok.length)].i : 0;
+}
+
 function playRun(strat, opts) {
   const st = STRATS[strat];
   const s = E.newRun({ trait: st.trait, alloc: st.alloc, seed: (R() * 4294967295) >>> 0 });
   s.useStartup = opts.startup;
   s.simStrat = strat;
-  const res = { strat, grades: {}, rankAge: {} };
+  const res = { strat, grades: {}, rankAge: {}, jobs: {}, turns: 0 };
   let guard = 0;
-  while (s.phase !== 'ended' && guard++ < 500) {
+  while (s.phase !== 'ended' && guard++ < 3000) {
     if (st.shop && (s.step === 'event' || s.step === 'action')) shopAll(s);
     if (s.step === 'event') {
       const e = E.currentEvent(s);
@@ -139,7 +161,9 @@ function playRun(strat, opts) {
       E.resolveEvent(s, ch.length ? ch[Math.floor(R() * ch.length)].i : -1);
       E.advanceEvent(s);
     } else if (s.step === 'action') {
-      const prefs = s.phase === 'student' ? st.student : s.phase === 'esports' ? proPrefs : engPrefs;
+      const prefs = s.phase === 'student' ? st.student : s.phase === 'esports' ? proPrefs : s.phase === 'second' ? secondPrefs : engPrefs;
+      if (s.phase === 'second') res.jobs[AW.Engine.stageKey(s)] = 1;
+      res.turns += 1;
       E.commitActions(s, pickActions(s, prefs, st.grind));
     } else if (s.step === 'season') {
       E.seasonDone(s);
@@ -147,10 +171,14 @@ function playRun(strat, opts) {
       if (E.canFire(s)) res.fire = 1;
       if (s.review && s.review.grade) res.grades[s.review.grade] = (res.grades[s.review.grade] || 0) + 1;
       if (s.eng && s.eng.rank && res.rankAge[s.eng.rank] == null) res.rankAge[s.eng.rank] = s.age;
-      if (s.decision) E.resolveDecision(s, 0);
+      if (s.decision) E.resolveDecision(s, pickDecision(s));
       else E.nextYear(s);
     } else if (s.step === 'decision') {
-      E.resolveDecision(s, 0);
+      E.resolveDecision(s, pickDecision(s));
+    } else if (s.step === 'chapter') {
+      if (SHORT) E.endHere(s); else E.continueLife(s);
+    } else if (s.step === 'farewell') {
+      E.lastWords(s, 0);
     } else if (s.step === 'check') {
       const info = E.checkInfo(s);
       if (s.age === 18) { res.best18 = info.best; res.reflex18 = s.stats.reflex; res.study18 = s.stats.study; res.proOk = info.proOk; res.studyOk = info.studyOk; }
@@ -167,6 +195,13 @@ function playRun(strat, opts) {
     } else break;
   }
   res.ending = s.ending && s.ending.id;
+  res.hit = s.chapters.map((c) => c.id).concat(res.ending);
+  res.nChapters = s.chapters.length;
+  if (s.dead) res.deathAge = s.age;
+  res.kids = s.kids.length;
+  res.wishes = (s.wishes || []).filter((w) => w.done).length;
+  res.life = s.ending && AW.ENDINGS[s.ending.id].life ? s.ending.id : null;
+  res.stuck = s.phase !== 'ended' ? s.step : null;
   res.age = s.age;
   res.legacy = s.ending && s.ending.legacy;
   if (s.esports) { res.tier = s.esports.maxTier; res.bestWorlds = s.esports.bestWorlds; res.dom = s.esports.domesticTitles; }
@@ -262,7 +297,7 @@ for (const strat of Object.keys(STRATS)) {
     console.log(`18歲 主遊戲 ${avg(runs, 'best18')} 反應 ${avg(runs, 'reflex18')} 學力 ${avg(runs, 'study18')}`);
     console.log(`職業門檻 ${pct(by((r) => r.proOk), N)}  升學門檻 ${pct(by((r) => r.studyOk), N)}  雙失敗 ${pct(by((r) => !r.proOk && !r.studyOk), N)}`);
     console.log(`路線：電競 ${pct(es.length, N)} 工程師 ${pct(en.length, N)} 平凡 ${pct(by((r) => r.path === 'ordinary'), N)}`);
-    if (es.length) console.log(`  電競：世界冠軍 ${pct(es.filter((r) => r.ending === 'world_champ').length, es.length)}  曾進世界賽 ${pct(es.filter((r) => r.bestWorlds > 0).length, es.length)}  國內冠軍 ${pct(es.filter((r) => r.dom > 0).length, es.length)}  最高Tier ${avg(es, 'tier')}  結束年齡 ${avg(es, 'age')}`);
+    if (es.length) console.log(`  電競：世界冠軍 ${pct(es.filter((r) => r.hit.includes('world_champ')).length, es.length)}  曾進世界賽 ${pct(es.filter((r) => r.bestWorlds > 0).length, es.length)}  國內冠軍 ${pct(es.filter((r) => r.dom > 0).length, es.length)}  最高Tier ${avg(es, 'tier')}  結束年齡 ${avg(es, 'age')}`);
     if (en.length) {
       const g = {};
       for (const r of en) for (const k of Object.keys(r.grades)) g[k] = (g[k] || 0) + r.grades[k];
@@ -273,7 +308,7 @@ for (const strat of Object.keys(STRATS)) {
       }).join(' ');
       console.log(`  考績 ${['S', 'A', 'B', 'C', 'D'].map((k) => k + ':' + pct(g[k] || 0, gt)).join(' ')}｜升到各職級的平均年齡 ${ages}`);
     }
-    if (en.length) console.log(`  工程：大老闆 ${pct(en.filter((r) => r.ending === 'tech_boss').length, en.length)}  最高職級 ${avg(en, 'rank')}  倒閉 ${pct(en.filter((r) => r.bankrupt).length, en.length)}  結束年齡 ${avg(en, 'age')}`);
+    if (en.length) console.log(`  工程：大老闆 ${pct(en.filter((r) => r.hit.includes('tech_boss')).length, en.length)}  最高職級 ${avg(en, 'rank')}  倒閉 ${pct(en.filter((r) => r.bankrupt).length, en.length)}  結束年齡 ${avg(en, 'age')}`);
     console.log(`  感情：交往過 ${pct(by((r) => r.dated), N)}  分手過 ${pct(by((r) => r.brokeUp), N)}  結局時已婚 ${pct(by((r) => r.married), N)}`);
     const dist = (k) => ['S', 'A', 'B', 'C', 'D'].map((g) => g + ':' + pct(by((r) => r[k] === g), N)).join(' ');
     console.log(`  健康評等 ${dist('gh')}｜幸福度 ${dist('gm')}｜慢性病 ${pct(by((r) => r.chronic), N)}｜曾可財富自由 ${pct(by((r) => r.fire), N)}`);
@@ -281,5 +316,18 @@ for (const strat of Object.keys(STRATS)) {
     const mid = (k) => { const v = runs.map((r) => r[k]).sort((a, b) => a - b); return AW.fmtMoney(v[Math.floor(v.length / 2)]); };
     console.log(`  金錢：結局存款中位數 ${mid('money')}  繳稅中位數 ${mid('tax')}  負債過 ${pct(by((r) => r.debt), N)}  破產 ${pct(by((r) => r.ending === 'bankrupt'), N)}｜朋友平均 ${avg(runs, 'npcs')} 人${es.length ? `  與王選手交手 ${avg(es, 'h2h')} 次` : ''}`);
     console.log('  結局', JSON.stringify(endings));
+    if (!SHORT) {
+      const hitPct = (id) => pct(by((r) => r.hit.includes(id)), N);
+      const dead = runs.filter((r) => r.deathAge).map((r) => r.deathAge).sort((a, b) => a - b);
+      const jobs = {};
+      for (const r of runs) for (const j of Object.keys(r.jobs)) jobs[j] = (jobs[j] || 0) + 1;
+      const lifeEnd = {};
+      for (const r of runs) if (r.life) lifeEnd[r.life] = (lifeEnd[r.life] || 0) + 1;
+      console.log(`  人生：章節平均 ${avg(runs, 'nChapters')} 個｜冠軍教練 ${hitPct('champ_coach')} 百萬訂閱 ${hitPct('mega_streamer')} 商業大亨 ${hitPct('tycoon')}｜回合數平均 ${avg(runs, 'turns')}`);
+      console.log(`  過世 ${pct(dead.length, N)}，年齡中位數 ${dead.length ? dead[Math.floor(dead.length / 2)] : '-'}（25% ${dead[Math.floor(dead.length * 0.25)] || '-'}、75% ${dead[Math.floor(dead.length * 0.75)] || '-'}）｜子女平均 ${avg(runs, 'kids')}｜遺願完成平均 ${avg(runs, 'wishes')}`);
+      console.log(`  第二幕職業 ${JSON.stringify(jobs)}｜人生終章 ${JSON.stringify(lifeEnd)}`);
+      const stuck = runs.filter((r) => r.stuck);
+      if (stuck.length) console.log(`  ⚠️ 卡住 ${stuck.length} 局：${JSON.stringify(stuck.slice(0, 3).map((r) => r.stuck))}`);
+    }
   }
 }

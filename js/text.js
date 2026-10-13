@@ -28,7 +28,9 @@
     // 通用變數：任何文本都能用
     vars(s) {
       if (!s) return {};
-      const v = { 名字: s.displayName, 年齡: s.age, 另一半: (s.love && s.love.name) || '她' };
+      const v = { 名字: s.displayName, 年齡: s.age, 另一半: (s.love && s.love.name) || '她',
+        新歡: s.flings && s.flings.length ? s.flings[s.flings.length - 1].name : '她' };
+      if (s.kids && s.kids.length) Object.assign(v, { 孩子: s.kids[0].name, 最小的孩子: s.kids[s.kids.length - 1].name });
       if (s.esports) Object.assign(v, { 戰隊: s.esports.team, 國內冠軍: s.esports.domesticTitles, 世界冠軍: s.esports.worldTitles });
       if (s.eng) Object.assign(v, { 公司: s.eng.stage === 'startup' ? s.eng.startupName : s.eng.companyName,
         職級: AW.Engineer ? AW.Engineer.rankName(s) : '' });

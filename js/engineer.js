@@ -111,7 +111,9 @@
       e.runway = 3;
       e.startupName = AW.pick(STARTUP_NAMES);
       s.flags.founded = (s.flags.founded || 0) + 1;
-      return { text: `成立「${e.startupName}」！投入 300 萬資金。`, deltas: { money: -3000000 } };
+      const sup = AW.Love.ventureSupport(s);
+      e.runway += sup.runway;
+      return { text: `成立「${e.startupName}」！投入 300 萬資金。${sup.text ? ' ' + sup.text : ''}`, deltas: { money: -3000000 } };
     },
 
     // 創業倒閉：回到職場，職級 -1

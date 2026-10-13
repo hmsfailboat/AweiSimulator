@@ -6,7 +6,8 @@
  * 「結果」(outcome) 格式：{ effects, income, bond, year, next, flags, run }
  *   income: 職涯收入（計入所得稅）；bond: 朋友好友度變化，例 { haji: 5 }
  *   year: 本年度暫時旗標（例 noGame）；next: 下一年旗標；flags: 永久旗標
- * phase 可以是陣列，例 ['student', 'esports']；threat: true → 雇用保全後不會發生
+ * phase: student / esports / engineer / second（第二幕與晚年）/ any，也可以是陣列，例 ['student', 'esports']
+ * threat: true → 雇用保全後不會發生；bond 也可以是 (s) => ({ 代號: 變化 })
  * 無 choices 的事件本身就是一個 outcome。
  * choice: { cond, ...outcome } 或 { cond, roll: { chance, success, fail } }
  *   hideLocked: 條件不符時整個選項不顯示（預設是顯示成灰色）
@@ -23,6 +24,19 @@
   const bond = (s, id) => AW.NPC.bond(s, id);
   const adult = (s) => s.age >= 18;
   const hasDebt = (s) => s.stats.money < 0;
+  // 朋友的婚禮：今年結婚的朋友（每位朋友一次）
+  const weddingFriend = (s) => {
+    if (s.yearFlags.wedFriend !== undefined) return s.yearFlags.wedFriend;
+    const pool = AW.NPC_ORDER.filter((id) => AW.NPC.met(s, id) && !s.npcs[id].wed);
+    return (s.yearFlags.wedFriend = pool.length ? AW.pick(pool) : null);
+  };
+  // 胡投顧的股災：趁低點加碼的金額（現金的兩成，最多 500 萬）
+  const dipAmount = (s) => s.yearFlags.dipAmount
+    || (s.yearFlags.dipAmount = Math.min(5000000, Math.round(Math.max(0, s.stats.money) * 0.2 / 10000) * 10000));
+  // 王選手帶你去賭場：賭金是現金的一成（1 萬～300 萬）
+  // （第一次算出來就記在今年，避免結果出來後內文的金額跟著變）
+  const wangBet = (s) => s.yearFlags.wangBet
+    || (s.yearFlags.wangBet = AW.clamp(Math.round(Math.max(0, s.stats.money) * 0.1 / 10000) * 10000, 10000, 3000000));
   // 胡投顧的明牌：投入現金的兩成（最多 1000 萬）
   const tipAmount = (s) => Math.min(10000000, Math.round(Math.max(0, s.stats.money) * 0.2 / 10000) * 10000);
 
@@ -481,7 +495,7 @@
     { id: 'new_love', phase: 'any', weight: (s) => (s.love ? 4 : 6),
       cond: (s) => s.age >= 16 && single(s) && (!s.love || s.age - s.love.endAge >= 1),
       vars: (s) => ({ 地點: s.phase === 'esports' ? '粉絲見面會' : s.phase === 'student' ? '補習班'
-        : s.eng.stage === 'uni' ? '通識課' : '朋友的婚禮' }),
+        : s.eng && s.eng.stage === 'uni' ? '通識課' : '朋友的婚禮' }),
       choices: [
         { roll: { chance: (s) => AW.clamp(0.2 + s.stats.social / 100, 0.15, 0.9),
           success: { effects: { mood: 12 }, run: startLove },
@@ -504,7 +518,7 @@
         { effects: { love: 8 } },
         { effects: { love: -10 } },
       ] },
-    { id: 'love_jealous', phase: 'any', weight: 6, cond: (s) => dating(s) && bestOf(s) >= 35,
+    { id: 'love_jealous', phase: 'any', weight: (s) => 6 * (AW.Love.type(s).jealousEvents || 1), cond: (s) => dating(s) && bestOf(s) >= 35,
       choices: [
         { effects: { love: 10, mood: -2 } },
         { effects: { love: -12, best: 2 } },
@@ -585,7 +599,7 @@
         { effects: { mood: 2 }, bond: { hu: -2 } },
       ] },
     { id: 'npc_hu_tip', phase: 'any', weight: 6,
-      cond: (s) => adult(s) && met('hu')(s) && bond(s, 'hu') >= 30 && s.stats.money >= 200000,
+      cond: (s) => adult(s) && met('hu')(s) && bond(s, 'hu') >= 20 && s.stats.money >= 200000,
       vars: (s) => ({ 金額: AW.fmtMoney(tipAmount(s)) }),
       choices: [
         { roll: { chance: (s) => AW.clamp(0.4 + bond(s, 'hu') / 200, 0.4, 0.85),
@@ -606,7 +620,7 @@
     { id: 'npc_haji_mortgage', phase: 'any', once: true, weight: 6,
       cond: (s) => s.age >= 26 && met('haji')(s) && bond(s, 'haji') >= 40 && s.stats.money >= 300000,
       choices: [
-        { effects: { money: -300000, mood: 2 }, bond: { haji: 15 }, run: (s) => { s.npcs.haji.owe = 300000; s.npcs.haji.oweAt = s.age; } },
+        { effects: { money: -300000, mood: 2 }, bond: { haji: 15 }, run: (s) => { s.npcs.haji.owe = 300000; s.npcs.haji.oweAt = s.age; s.npcs.haji.lent = 1; } },
         { bond: { haji: -8 } },
       ] },
     { id: 'npc_haji_repay', phase: 'any', once: true, weight: 200,
@@ -644,14 +658,28 @@
         { effects: { mood: 1 }, bond: { wang: -1 } },
       ] },
 
+    { id: 'wang_casino', phase: 'any', weight: 3,
+      cond: (s) => adult(s) && met('wang')(s) && !s.flags.noGamble && !s.flags.wangQuit && s.stats.money >= 50000,
+      vars: (s) => ({ 賭金: AW.fmtMoney(wangBet(s)) }),
+      choices: [
+        { roll: { chance: 0.4,
+          success: { effects: { mood: 8 }, bond: { wang: 4 }, run: (s) => AW.Casino.record(s, wangBet(s)) },
+          fail: { effects: { mood: -8 }, bond: { wang: 2 }, run: (s) => AW.Casino.record(s, -wangBet(s)) } } },
+        { effects: { mood: 3 }, bond: { wang: 5 }, run: (s) => {
+          if (!AW.chance(0.5)) return {};
+          return { text: AW.tx('event.wang_casino', 'lend', s), deltas: AW.applyEffects(s, { money: -50000 }) };
+        } },
+        { bond: { wang: -3 } },
+      ] },
+
     // 阿方
     { id: 'npc_fang_supper', phase: 'any', weight: 6, cond: (s) => s.age >= 16 && met('fang')(s),
       effects: { health: 5, mood: 6 }, bond: { fang: 4 } },
     { id: 'npc_fang_restaurant', phase: 'any', once: true, weight: 6,
-      cond: (s) => s.age >= 28 && met('fang')(s) && bond(s, 'fang') >= 40 && s.stats.money >= 1000000,
+      cond: (s) => s.age >= 28 && met('fang')(s) && bond(s, 'fang') >= 25 && s.stats.money >= 1000000,
       choices: [
         { roll: { chance: 0.6,
-          success: { effects: { money: 1000000, mood: 8 }, bond: { fang: 10 } },
+          success: { effects: { money: 1000000, mood: 8 }, bond: { fang: 10 }, flags: { fangInvest: 1 } },
           fail: { effects: { money: -1000000, mood: -6 }, bond: { fang: 5 } } } },
         { effects: { money: -5000, mood: 4 }, bond: { fang: 4 } },
       ] },
@@ -664,9 +692,9 @@
       choices: [
         { cond: (s) => s.stats.money >= (s.phase === 'esports' ? 100000 : 3000),
           roll: { chance: 0.7,
-            success: { effects: (s) => ({ fame: 6, mood: 4, money: s.phase === 'esports' ? -100000 : -3000 }), bond: { cat: 3 } },
+            success: { effects: (s) => ({ fame: 6, mood: 4, money: s.phase === 'esports' ? -100000 : -3000 }), bond: { cat: 3 }, flags: { usedBoost: 1 } },
             fail: { effects: (s) => ({ fame: s.phase === 'esports' ? -15 : -8, mood: -10, money: s.phase === 'esports' ? -100000 : -3000 }),
-              year: { noGame: 1 } } } },
+              year: { noGame: 1 }, flags: { usedBoost: 1 } } } },
         { effects: { best: 1 } },
       ] },
     { id: 'npc_cat_help', phase: 'any', weight: 4, cond: (s) => adult(s) && met('cat')(s),
@@ -691,11 +719,95 @@
           success: { effects: { mood: 2 } },
           fail: { effects: { health: -10, mood: -10 } } } },
       ] },
-    { id: 'npc_corey_gym', phase: 'any', weight: 4, cond: (s) => adult(s) && met('corey')(s),
-      effects: { health: 8, mood: -2 }, bond: { corey: 5 } },
     { id: 'robbery', phase: 'any', weight: 4, threat: true,
       cond: (s) => s.age >= 25 && (s.stats.money >= 5000000 || (s.items && s.items.mansion)),
       effects: (s) => ({ money: -Math.min(5000000, Math.round(Math.max(0, s.stats.money) * 0.03)), mood: -10 }) },
+
+    // 感情：狗仔拍到約會（v2.0）
+    { id: 'love_paparazzi', phase: 'esports', weight: 5, cond: (s) => dating(s) && s.stats.fame >= 30,
+      choices: [
+        { effects: { fame: 4, love: 8, mood: 3 } },
+        { roll: { chance: 0.5,
+          success: { effects: { mood: 2 } },
+          fail: { effects: { love: -12, fame: -3 } } } },
+      ] },
+
+    // ======================= 朋友事件（v2.0 追加） =======================
+    // 1. 王選手又輸光了：借錢 → 3 年後還錢事件
+    { id: 'wang_broke', phase: 'any', weight: 3,
+      cond: (s) => adult(s) && met('wang')(s) && s.seen.wang_casino && !s.flags.wangQuit && !s.npcs.wang.owe && s.stats.money >= 200000,
+      choices: [
+        { effects: { money: -200000 }, bond: { wang: 12 }, run: (s) => { s.npcs.wang.owe = 200000; s.npcs.wang.oweAt = s.age; } },
+        { bond: { wang: -5 } },
+        { roll: { chance: (s) => AW.clamp(0.2 + s.stats.social / 150, 0.2, 0.8),
+          success: { effects: { mood: 5 }, bond: { wang: 8 }, flags: { wangQuit: 1 } },
+          fail: { effects: { mood: -2 }, bond: { wang: -2 } } } },
+      ] },
+    { id: 'wang_repay', phase: 'any', weight: 200, cond: (s) => met('wang')(s) && s.npcs.wang.owe && s.age - s.npcs.wang.oweAt >= 3,
+      run: (s) => {
+        const owe = s.npcs.wang.owe;
+        s.npcs.wang.owe = 0;
+        if (AW.chance(0.5)) return { text: AW.tx('event.wang_repay', 'msg_pay', s), deltas: AW.applyEffects(s, { money: owe, mood: 6 }) };
+        return { text: AW.tx('event.wang_repay', 'msg_nopay', s), deltas: AW.applyEffects(s, { mood: -3 }) };
+      } },
+    // 2. 哈基咩繳完房貸了（借過他錢的話他會特別感謝你）
+    { id: 'haji_mortgage_done', phase: 'any', once: true, weight: 15, cond: (s) => s.age >= 48 && s.age <= 56 && met('haji')(s),
+      variant: (s) => (s.npcs.haji.lent ? 'lent' : 'normal'),
+      effects: { mood: 8 }, bond: (s) => ({ haji: s.npcs.haji.lent ? 10 : 5 }) },
+    // 3. 哈基咩升官了
+    { id: 'haji_promotion', phase: 'any', once: true, weight: 6, cond: (s) => s.age >= 30 && met('haji')(s),
+      choices: [
+        { effects: { mood: 6 }, bond: { haji: 2 } },
+        { effects: { social: 2, mood: 3 }, bond: { haji: 6 } },
+      ] },
+    // 4. 阿方上美食節目
+    { id: 'fang_tv', phase: 'any', once: true, weight: 6, cond: (s) => s.age >= 30 && met('fang')(s) && bond(s, 'fang') >= 20,
+      choices: [
+        { effects: { mood: 6 }, bond: { fang: 8 } },
+        { effects: (s) => ({ fame: s.phase === 'second' && s.second.job === 'streamer' ? 5 : 3 }), bond: { fang: 5 },
+          run: (s) => { if (s.phase === 'second' && s.second.job === 'streamer') s.second.subs = Math.round(s.second.subs * 1.03); } },
+      ] },
+    // 5. 阿方的餐廳摘星（投資成功過才會發生）
+    { id: 'fang_star', phase: 'any', once: true, weight: 20, cond: (s) => s.flags.fangInvest && s.age >= 32 && met('fang')(s),
+      effects: { money: 2000000, mood: 10 }, bond: { fang: 8 } },
+    // 6. 長長貓的代練被抓包（用過代練才會發生）
+    { id: 'cat_busted', phase: 'any', once: true, weight: 10, cond: (s) => s.flags.usedBoost && s.age >= 16 && met('cat')(s),
+      choices: [
+        { effects: { fame: -4, mood: -2 }, bond: { cat: 10 } },
+        { effects: { mood: -3 }, bond: { cat: -10 } },
+      ] },
+    // 7. 長長貓開分店
+    { id: 'cat_branch', phase: 'any', once: true, weight: 6, cond: (s) => s.age >= 35 && met('cat')(s),
+      choices: [
+        { cond: (s) => s.stats.money >= 1000000,
+          roll: { chance: 0.55,
+            success: { effects: { money: 1000000, mood: 8 }, bond: { cat: 8 } },
+            fail: { effects: { money: -1000000, mood: -5 }, bond: { cat: 4 } } } },
+        { effects: { mood: 4, fame: 1 }, bond: { cat: 8 } },
+      ] },
+    // 8. Corey 見義勇為
+    { id: 'corey_hero', phase: 'any', once: true, weight: 5, cond: (s) => s.age >= 16 && met('corey')(s),
+      effects: { mood: 6 }, run: (s) => ({ bonds: AW.NPC.metList(s).map((id) => ({ id, v: AW.NPC.addBond(s, id, id === 'corey' ? 5 : 2) })).filter((x) => x.v) }) },
+    // 9. 朋友的婚禮（每位朋友一次，當伴郎）
+    { id: 'friend_wedding', phase: 'any', weight: 5, cond: (s) => s.age >= 25 && s.age <= 40 && !!weddingFriend(s),
+      vars: (s) => ({ 朋友: AW.NPC.name(weddingFriend(s) || 'haji') }),
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.social / 100, 0.25, 0.9),
+          success: { effects: { social: 3, fame: 2, mood: 6 }, bond: (s) => ({ [weddingFriend(s)]: 6 }), run: (s) => { s.npcs[weddingFriend(s)].wed = 1; } },
+          fail: { effects: { mood: 4 }, bond: (s) => ({ [weddingFriend(s)]: 3 }), run: (s) => { s.npcs[weddingFriend(s)].wed = 1; } } } },
+        { cond: (s) => s.stats.money >= 66000, effects: { money: -66000, mood: 4 }, bond: (s) => ({ [weddingFriend(s)]: 10 }),
+          run: (s) => { s.npcs[weddingFriend(s)].wed = 1; } },
+      ] },
+    // 11. 胡投顧的股災
+    { id: 'hu_crash', phase: 'any', weight: 4, cond: (s) => s.age >= 25 && met('hu')(s) && bond(s, 'hu') >= 40,
+      vars: (s) => ({ 金額: AW.fmtMoney(dipAmount(s)) }),
+      choices: [
+        { effects: { mood: -2 }, bond: { hu: 10 } },
+        { cond: (s) => s.stats.money >= 1000000,
+          roll: { chance: 0.55,
+            success: { effects: (s) => ({ money: dipAmount(s), mood: 8 }), bond: { hu: 4 } },
+            fail: { effects: (s) => ({ money: -Math.round(dipAmount(s) / 2), mood: -6 }) } } },
+      ] },
 
     // ======================= 宿敵王選手（v1.2） =======================
     { id: 'rival_trash', phase: 'esports', weight: 6, cond: (s) => !!s.rival,
@@ -727,6 +839,156 @@
           effects: (s) => ({ money: -Math.round(s.stats.money / 2), mood: -5, fame: -5 }), bond: { haji: 5 },
           flags: { renewal: 1 }, run: (s) => { s.fin.debtYears = 0; } },
         { effects: { mood: -8 } },
+      ] },
+
+    // ======================= 感情：同時交往（v2.0） =======================
+    { id: 'love_tempt', phase: 'any', weight: 5, cond: (s) => s.age >= 18 && s.age <= 55 && AW.Love.canTempt(s),
+      choices: [
+        { roll: { chance: (s) => AW.clamp(0.3 + s.stats.social / 200, 0.3, 0.85),
+          success: { effects: { mood: 10 }, run: (s) => AW.Love.addFling(s) },
+          fail: { effects: { mood: -5, social: -2 } } } },
+        { effects: { love: 5 } },
+      ] },
+    { id: 'love_shura', phase: 'any', weight: 1000, cond: (s) => s.flags.shuraPending && s.flings.length > 0 && AW.Love.active(s),
+      choices: [
+        { roll: { chance: (s) => AW.clamp(0.25 + s.stats.social / 300, 0.25, 0.6),
+          success: { effects: { mood: -8 }, run: (s) => AW.Love.shuraEnd(s, 'keep') },
+          fail: { effects: { mood: -20, fame: -3 }, run: (s) => AW.Love.shuraEnd(s, 'all') } } },
+        { effects: { mood: -10 }, run: (s) => AW.Love.shuraEnd(s, 'keep') },
+        { effects: { mood: -6 }, run: (s) => AW.Love.shuraEnd(s, 'swap') },
+        { effects: { mood: -15 }, run: (s) => AW.Love.shuraEnd(s, 'all') },
+      ] },
+
+    // ======================= 家庭（v2.0） =======================
+    { id: 'baby', phase: 'any', weight: 40, cond: (s) => AW.Family.canHaveKid(s),
+      choices: [
+        { effects: { mood: 15, love: 10 }, run: (s) => AW.Family.addKid(s) },
+        { effects: { love: -3 } },
+      ] },
+    { id: 'kid_first_game', phase: 'any', once: true, weight: 15, cond: (s) => s.kids.some((k) => AW.Family.age(s, k) >= 6 && AW.Family.age(s, k) <= 10),
+      choices: [
+        { effects: { mood: 8 }, run: (s) => { s.kids.forEach((k) => { k.games += 2; }); } },
+        { effects: { mood: 4, love: 3 } },
+      ] },
+    { id: 'kid_rebel', phase: 'any', once: true, weight: 10, cond: (s) => s.kids.some((k) => AW.Family.age(s, k) >= 13 && AW.Family.age(s, k) <= 17),
+      choices: [
+        { roll: { chance: (s) => AW.clamp(0.3 + s.stats.social / 120, 0.3, 0.9),
+          success: { effects: { mood: 8, love: 4 } },
+          fail: { effects: { mood: -6 } } } },
+        { effects: { mood: -4 } },
+      ] },
+    { id: 'kid_college', phase: 'any', once: true, weight: 15, cond: (s) => s.kids.some((k) => AW.Family.age(s, k) === 18),
+      effects: { mood: 10, money: -200000 } },
+    { id: 'kid_wedding', phase: 'any', weight: 25, cond: (s) => !!AW.Family.marriageable(s),
+      vars: (s) => ({ 新人: (AW.Family.marriageable(s) || {}).name || '' }),
+      choices: [
+        { cond: (s) => s.stats.money >= 1000000, effects: { money: -1000000, mood: 15, social: 2 },
+          run: (s) => { AW.Family.marriageable(s).married = true; } },
+        { effects: { mood: 10 }, run: (s) => { AW.Family.marriageable(s).married = true; } },
+      ] },
+
+    // ======================= 中年（v2.0） =======================
+    { id: 'midlife_crisis', phase: 'any', once: true, weight: 8, cond: (s) => s.age >= 40 && s.age <= 50,
+      choices: [
+        { cond: (s) => s.stats.money >= 8000000 && !s.items.car, hideLocked: true, effects: { money: -8000000, mood: 15, fame: 4 },
+          run: (s) => { s.items.car = 1; s.itemSince.car = s.age; } },
+        { effects: { best: 5, mood: 10, health: -3 } },
+        { roll: { chance: (s) => AW.clamp(s.stats[AW.resolveKey(s, 'best')] / 110, 0.05, 0.8),
+          success: { effects: { fame: 15, mood: 15 }, flags: { oldSoldier: 1 } },
+          fail: { effects: { mood: -6, health: -5 } } } },
+      ] },
+
+    // ======================= 第二幕：退役與傳奇（v2.0） =======================
+    { id: 'hall_of_fame', phase: 'second', once: true, weight: 30,
+      cond: (s) => s.esports && (s.esports.worldTitles >= 1 || s.esports.domesticTitles >= 3),
+      effects: { fame: 10, mood: 12 }, flags: { hallOfFame: 1 } },
+    { id: 'farewell_match', phase: 'second', once: true, weight: 50,
+      cond: (s) => s.rival && s.esports && s.second.since === s.age && s.age < 40,
+      choices: [
+        { roll: { chance: 0.5,
+          success: { effects: { mood: 12, fame: 5 }, bond: { wang: 10 } },
+          fail: { effects: { mood: 5, fame: 3 }, bond: { wang: 10 } } } },
+        { effects: { mood: 8 }, bond: { wang: 15 } },
+      ] },
+
+    // 實況主
+    { id: 'stream_flame', phase: 'second', weight: 6, cond: (s) => s.second.job === 'streamer' && s.age < 65,
+      choices: [
+        { effects: { fame: -3, mood: -5 } },
+        { roll: { chance: 0.4,
+          success: { effects: { fame: 5, mood: 3 } },
+          fail: { effects: { fame: -12, mood: -8 }, run: (s) => { s.second.subs = Math.round(s.second.subs * 0.85); } } } },
+      ] },
+    { id: 'stream_donate', phase: 'second', weight: 5, cond: (s) => s.second.job === 'streamer' && s.age < 65,
+      income: 500000, effects: { mood: 8 } },
+    // 12. 王選手開直播找你連線（實況主的話訂閱數也會增加）
+    { id: 'stream_wang', phase: 'any', weight: 4, cond: (s) => s.age >= 30 && AW.NPC.met(s, 'wang') && AW.NPC.bond(s, 'wang') >= 30,
+      effects: { mood: 8, fame: 3 }, bond: { wang: 8 },
+      run: (s) => { if (s.phase === 'second' && s.second.job === 'streamer') s.second.subs = Math.round(s.second.subs * 1.05); } },
+
+    // 教練
+    { id: 'coach_rookie', phase: 'second', weight: 6, cond: (s) => s.second.job === 'coach' && s.age < 65,
+      choices: [
+        { effects: { mood: -2, tactics: 2 }, run: (s) => { s.second.bonus += 4; } },
+        { effects: { mood: 2 } },
+      ] },
+    { id: 'coach_rival', phase: 'second', weight: 5, cond: (s) => s.second.job === 'coach' && s.age < 65 && !!s.rival,
+      vars: (s) => AW.Esports.rivalVars(s),
+      choices: [
+        { effects: { fame: 4, mood: 3 }, bond: { wang: -3 } },
+        { effects: { tactics: 3 }, bond: { wang: 3 } },
+      ] },
+
+    // 創業從商、董事長
+    { id: 'biz_partner', phase: 'second', weight: 6, cond: (s) => s.second.job === 'biz' && s.age < 65 && !!s.second.partner,
+      vars: (s) => ({ 合夥人: AW.NPC.name(s.second.partner) }),
+      effects: { mood: 6, social: 2 }, year: { sp: 2 }, bond: (s) => ({ [s.second.partner]: 6 }) },
+    { id: 'biz_crisis', phase: 'second', weight: 5, cond: (s) => s.second.job === 'biz' && s.age < 65,
+      choices: [
+        { effects: { mood: -4 }, year: { sp: -2 } },
+        { roll: { chance: (s) => AW.clamp(s.stats.leader / 100, 0.2, 0.8),
+          success: { effects: { fame: 3 }, year: { sp: 2 } },
+          fail: { effects: { fame: -8, mood: -8 }, year: { sp: -4 } } } },
+      ] },
+    { id: 'hostile_takeover', phase: 'second', weight: 5, cond: (s) => s.second.job === 'chairman' && s.age < 65,
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.leader / 110 + (AW.NPC.bond(s, 'hu') >= 60 ? 0.15 : 0), 0.2, 0.9),
+          success: { effects: { fame: 5, mood: 8 }, year: { sp: 3 } },
+          fail: { effects: { mood: -10 }, year: { sp: -4 } } } },
+        { effects: { mood: -3, money: -20000000 } },
+      ] },
+    { id: 'own_team', phase: 'second', weight: 6, cond: (s) => s.flags.ownTeam,
+      effects: { fame: 4, mood: 8 } },
+
+    // ======================= 晚年（v2.0） =======================
+    { id: 'old_friend_visit', phase: 'second', weight: 6, cond: (s) => s.age >= 55 && AW.NPC.metList(s).length > 0,
+      vars: (s) => ({ 朋友: AW.NPC.name(AW.NPC.metList(s).sort((a, b) => AW.NPC.bond(s, b) - AW.NPC.bond(s, a))[0]) }),
+      effects: { mood: 8 }, run: (s) => {
+        const id = AW.NPC.metList(s).sort((a, b) => AW.NPC.bond(s, b) - AW.NPC.bond(s, a))[0];
+        return { bonds: [{ id, v: AW.NPC.addBond(s, id, 5) }] };
+      } },
+    { id: 'elder_fall', phase: 'second', weight: 6, cond: (s) => s.age >= 65, effects: { health: -12, mood: -4 } },
+    { id: 'elder_hospital', phase: 'second', weight: 8, cond: (s) => s.age >= 70 && s.stats.health < 40,
+      choices: [
+        { cond: (s) => s.stats.money >= 1000000, effects: { money: -1000000, health: 15, mood: -2 } },
+        { effects: { health: 5, mood: -4 } },
+      ] },
+    { id: 'elder_grandkids', phase: 'second', weight: 6, cond: (s) => s.age >= 60 && s.grandkids >= 1,
+      effects: { mood: 12, best: 1 } },
+    { id: 'charity_thanks', phase: 'second', weight: 4, cond: (s) => (s.counters.donated || 0) >= 10000000,
+      effects: { mood: 10, fame: 2 } },
+    { id: 'wish_reunion', phase: 'second', weight: 30,
+      cond: (s) => AW.Second.hasWish(s, 'reunion') && AW.NPC.gamers(s).filter((id) => AW.NPC.bond(s, id) >= 40).length >= 4,
+      effects: { mood: 15 }, run: (s) => {
+        AW.Second.completeWish(s, 'reunion');
+        return { bonds: AW.NPC.gamers(s).map((id) => ({ id, v: AW.NPC.addBond(s, id, 5) })).filter((x) => x.v) };
+      } },
+    { id: 'wish_wang', phase: 'second', weight: 30, cond: (s) => AW.Second.hasWish(s, 'rival_match'),
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats[AW.resolveKey(s, 'best')] / 100, 0.2, 0.8),
+          success: { effects: { mood: 15 }, bond: { wang: 10 }, run: (s) => { AW.Second.completeWish(s, 'rival_match'); } },
+          fail: { effects: { mood: 10 }, bond: { wang: 10 }, run: (s) => { AW.Second.completeWish(s, 'rival_match'); } } } },
+        { effects: { mood: 12 }, bond: { wang: 12 }, run: (s) => { AW.Second.completeWish(s, 'rival_match'); } },
       ] },
 
     // ======================= 賭博 =======================

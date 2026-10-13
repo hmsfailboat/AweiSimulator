@@ -56,9 +56,13 @@
 
     // 年末：好友度自然下降、依人緣擲骰認識新朋友（每年最多一位）
     yearEnd(s) {
-      const keep = s.stats.social >= B().socialKeep;
+      // 人緣高、或上了年紀（老朋友不會輕易斷了聯絡），好友度下降較慢
+      const keep = s.stats.social >= B().socialKeep || s.age >= B().oldAge;
       for (const id of this.metList(s)) {
-        if (s.yearActions.includes('squad') && AW.NPCS[id].gamer) continue;
+        const d = AW.NPCS[id];
+        if (s.yearActions.includes('squad') && d.gamer) continue;
+        // 不打電動的朋友（胡投顧）：這一年有交際類行動，好友度反而上升
+        if (!d.gamer && s.yearActions.some((a) => d.likes.includes(a))) { this.addBond(s, id, B().social); continue; }
         this.addBond(s, id, -(keep ? B().decaySocial : B().decay));
       }
       // 人緣越高越容易認識；出社會後比較難交到新朋友

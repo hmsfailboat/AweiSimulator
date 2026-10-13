@@ -22,7 +22,9 @@
 | `js/office.js` | 工程師的職場聯賽：季度專案、同期排行、升遷答辯、董事會投票、創業募資 |
 | `js/finance.js` | 所得稅、生活水準、投資、貸款、負債與破產 |
 | `js/npcs.js` | 朋友：認識、好友度、雇用 |
-| `js/love.js` | 感情：交往、求婚、結婚、分手 |
+| `js/second.js` | 人生第二幕（實況主、教練、創業、董事長、退休）、晚年、遺願清單、人生終章 |
+| `js/family.js` | 子女、孫子 |
+| `js/love.js` | 感情：交往、求婚、結婚、分手、同時交往 |
 | `js/shop.js` | 道具商店、賭場 |
 | `js/ui.js` | 畫面 |
 | `tools/sim.js` | 平衡模擬：`node tools/sim.js 1000`；`node tools/sim.js --meta` 統計幾局能全部解鎖傳承商店 |
