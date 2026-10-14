@@ -11,6 +11,11 @@
 
 （尚無變更）
 
+## [2.0.1] - 2026-10-14
+
+### 修正
+- 人生第二幕：達成某個職涯章節後，同一輩子不能再選同一條路——「百萬訂閱實況主」後不能再當實況主、「冠軍教練」後不能再當教練、「商業大亨」後不能再創業或當董事長。
+
 ## [2.0] - 2026-10-14
 
 人生不再停在冠軍或大老闆——每個章節都可以選擇落幕或繼續，一路走到晚年與告別式。企劃見 [docs/PLAN-v2.md](docs/PLAN-v2.md)。舊存檔可以直接接著玩。
@@ -219,7 +224,8 @@
 - 深色電競風介面，支援手機版面。
 - `tools/sim.js` 無頭平衡模擬工具。
 
-[未發布]: https://github.com/hmsfailboat/AweiSimulator/compare/v2.0...HEAD
+[未發布]: https://github.com/hmsfailboat/AweiSimulator/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/hmsfailboat/AweiSimulator/compare/v2.0...v2.0.1
 [2.0]: https://github.com/hmsfailboat/AweiSimulator/compare/v1.2...v2.0
 [1.2]: https://github.com/hmsfailboat/AweiSimulator/compare/v1.1...v1.2
 [1.1]: https://github.com/hmsfailboat/AweiSimulator/compare/v1.0...v1.1

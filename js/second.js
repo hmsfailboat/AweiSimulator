@@ -75,19 +75,21 @@
       const opts = [];
       // 只有「轉換跑道」時才排除目前的工作（公司收掉、被趕下台時一定可以選退休）
       const cur = reason === 'switch' && s.phase === 'second' ? s.second.job : null;
+      // 這輩子已經完成的職涯章節，不能再選同一條路
+      const done = (id) => AW.Engine.hasChapter(s, id);
       if (reason === 'world_champ' && s.phase === 'esports' && s.age < 32) {
         opts.push({ label: tx('opt_defend'), desc: tx('opt_defend_desc'), apply: () => ({ text: tx('msg_defend') }) });
       }
-      if (reason === 'tech_boss') {
+      if (reason === 'tech_boss' && !done('tycoon')) {
         opts.push({ label: tx('opt_chairman'), desc: tx('opt_chairman_desc'), apply: (st) => this.start(st, 'chairman') });
       }
-      if (s.esports && cur !== 'coach' && s.age < ELDER_AGE) {
+      if (s.esports && cur !== 'coach' && !done('champ_coach') && s.age < ELDER_AGE) {
         opts.push({ label: tx('opt_coach'), desc: tx('opt_coach_desc'), apply: (st) => this.start(st, 'coach') });
       }
-      if ((s.esports || s.stats.fame >= 15) && cur !== 'streamer' && s.age < ELDER_AGE) {
+      if ((s.esports || s.stats.fame >= 15) && cur !== 'streamer' && !done('mega_streamer') && s.age < ELDER_AGE) {
         opts.push({ label: tx('opt_streamer'), desc: tx('opt_streamer_desc', { 訂閱: this.fmtSubs(this.startSubs(s)) }), apply: (st) => this.start(st, 'streamer') });
       }
-      if (s.age < 60 && cur !== 'biz' && cur !== 'chairman') {
+      if (s.age < 60 && cur !== 'biz' && cur !== 'chairman' && !done('tycoon')) {
         const theme = this.pickTheme(s);
         const free = reason === 'ousted';
         const ok = free || s.stats.money >= BIZ_COST;
