@@ -102,8 +102,7 @@
       // 離婚：財產分一半（現金與投資）
       if (married) {
         const half = Math.max(0, Math.round(s.stats.money / 2));
-        let inv = 0;
-        for (const id of Object.keys((s.fin && s.fin.inv) || {})) { const v = Math.round(s.fin.inv[id] / 2); s.fin.inv[id] -= v; inv += v; }
+        const inv = s.fin ? AW.Finance.splitShare(s, 0.5) : 0;
         if (half) AW.mergeDeltas(deltas, AW.applyEffects(s, { money: -half }));
         if (half + inv) text += ' ' + AW.tx('love', 'msg_split', s, { 金額: AW.fmtMoney(half + inv) });
       }

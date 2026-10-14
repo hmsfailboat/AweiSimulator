@@ -15,6 +15,9 @@
     bond(s, id) { return this.met(s, id) ? s.npcs[id].bond : 0; },
     metList(s) { return AW.NPC_ORDER.filter((id) => this.met(s, id)); },
     gamers(s) { return this.metList(s).filter((id) => AW.NPCS[id].gamer); },
+    // 會一起開黑的人：開黑朋友 + 偶爾陪玩的胡投顧
+    squadMembers(s) { return this.metList(s).filter((id) => AW.NPCS[id].gamer || AW.NPCS[id].squad); },
+    squadMult(id) { const d = AW.NPCS[id]; return d.gamer ? 1 : d.squad || 0; },
     unmet(s, gamerOnly) { return AW.NPC_ORDER.filter((id) => !this.met(s, id) && (!gamerOnly || AW.NPCS[id].gamer)); },
 
     meet(s, id, key) {
@@ -43,12 +46,12 @@
       return out;
     },
 
-    // 揪團開黑：所有開黑朋友好友度上升，人緣越高漲越多
+    // 揪團開黑：所有開黑朋友好友度上升，人緣越高漲越多（胡投顧只加一半）
     squad(s) {
       const mult = 1 + s.stats.social / 200;
       const out = [];
-      for (const id of this.gamers(s)) {
-        const d = this.addBond(s, id, B().squad * mult);
+      for (const id of this.squadMembers(s)) {
+        const d = this.addBond(s, id, B().squad * mult * this.squadMult(id));
         if (d) out.push({ id, v: d });
       }
       return out;
@@ -60,9 +63,10 @@
       const keep = s.stats.social >= B().socialKeep || s.age >= B().oldAge;
       for (const id of this.metList(s)) {
         const d = AW.NPCS[id];
-        if (s.yearActions.includes('squad') && d.gamer) continue;
         // 不打電動的朋友（胡投顧）：這一年有交際類行動，好友度反而上升
         if (!d.gamer && s.yearActions.some((a) => d.likes.includes(a))) { this.addBond(s, id, B().social); continue; }
+        // 有揪團開黑的那一年，一起開黑的朋友好友度不會下降
+        if (s.yearActions.includes('squad') && (d.gamer || d.squad)) continue;
         this.addBond(s, id, -(keep ? B().decaySocial : B().decay));
       }
       // 人緣越高越容易認識；出社會後比較難交到新朋友

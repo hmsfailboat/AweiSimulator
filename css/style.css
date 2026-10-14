@@ -432,3 +432,5 @@ em.down { color: var(--bad); }
 .epitaph p { margin: 0; color: var(--muted); font-style: italic; }
 .k-tactics { background: linear-gradient(90deg, #8b5cf6, #c4b5fd); }
 .love-type { cursor: help; font-size: .72rem; padding: .05em .5em; }
+.invest-sum { display: flex; flex-wrap: wrap; gap: .3em 1.1em; background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: .5em .8em; margin: .3em 0 .6em; font-size: .86rem; }
+.inv-val small { font-size: .76rem; }

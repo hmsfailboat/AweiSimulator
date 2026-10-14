@@ -586,10 +586,11 @@
       run: (s) => ({ text: AW.NPC.meet(s, AW.pick(AW.NPC.unmet(s, true))) }) },
     { id: 'npc_squad_night', phase: 'any', weight: 8,
       cond: (s) => s.age >= 14 && AW.NPC.gamers(s).filter((id) => bond(s, id) >= 50).length >= 4,
+      variant: (s) => (AW.NPC.met(s, 'hu') ? 'hu' : 'normal'),
       effects: { mood: 15, best: 2, health: -3 },
       run: (s) => {
         if (AW.NPC.gamers(s).length >= 5) s.flags.squad6 = 1;
-        return { bonds: AW.NPC.gamers(s).map((id) => ({ id, v: AW.NPC.addBond(s, id, 5) })).filter((x) => x.v) };
+        return { bonds: AW.NPC.squadMembers(s).map((id) => ({ id, v: AW.NPC.addBond(s, id, 5 * AW.NPC.squadMult(id)) })).filter((x) => x.v) };
       } },
 
     // 胡投顧
@@ -981,7 +982,7 @@
       cond: (s) => AW.Second.hasWish(s, 'reunion') && AW.NPC.gamers(s).filter((id) => AW.NPC.bond(s, id) >= 40).length >= 4,
       effects: { mood: 15 }, run: (s) => {
         AW.Second.completeWish(s, 'reunion');
-        return { bonds: AW.NPC.gamers(s).map((id) => ({ id, v: AW.NPC.addBond(s, id, 5) })).filter((x) => x.v) };
+        return { bonds: AW.NPC.squadMembers(s).map((id) => ({ id, v: AW.NPC.addBond(s, id, 5) })).filter((x) => x.v) };
       } },
     { id: 'wish_wang', phase: 'second', weight: 30, cond: (s) => AW.Second.hasWish(s, 'rival_match'),
       choices: [

@@ -267,9 +267,18 @@
         ${this.rFriendsBox(s)}
         ${this.rWishes(s)}
         <div class="money ${money < 0 ? 'debt' : ''}">💰 ${AW.fmtMoney(money)} ${money !== pm ? `<em class="${money > pm ? 'up' : 'down'}">${money > pm ? '+' : ''}${AW.fmtMoney(money - pm)}</em>` : ''}</div>
-        ${AW.Finance.invested(s) ? `<div class="muted small">📈 投資中 ${AW.fmtMoney(AW.Finance.invested(s))}</div>` : ''}
+        ${this.rInvestLine(s)}
         ${this.rShopBtns(s)}
         <div class="trait-tag" title="${esc(t.desc || '')}">${t.icon || ''} 天賦：${esc(t.name || '無')}</div>`;
+    },
+
+    // 面板：投資市值與未實現損益
+    rInvestLine(s) {
+      const F = AW.Finance;
+      const v = F.invested(s);
+      if (!v) return '';
+      const pl = v - F.investCost(s);
+      return `<div class="muted small" data-act="finance">📈 投資市值 ${AW.fmtMoney(v)} <b class="${pl >= 0 ? 'ok' : 'bad'}">${esc(F.fmtPL(pl))}</b></div>`;
     },
 
     rStatus(s) {
@@ -882,13 +891,16 @@
       const money = s.stats.money;
       const amts = [100000, 1000000, 10000000].filter((a) => a <= money);
       const inv = Object.keys(F.PRODUCTS).filter((id) => F.productOk(s, id) || f.inv[id]).map((id) => {
-        const v = f.inv[id] || 0;
+        const pos = F.position(s, id);
+        const v = pos.v;
         const btns = F.productOk(s, id) && open ? amts.map((a) => `<button class="bet" data-act="invest" data-id="${id}" data-a="${a}">+${AW.fmtMoney(a)}</button>`).join('')
           + (money > 0 ? `<button class="bet all" data-act="invest" data-id="${id}" data-a="all">全部</button>` : '') : '';
         return `<div class="shop-item"><div class="si-body"><b>${esc(AW.tx('finance', 'inv_' + id, s))}</b>
             <span class="muted small">${esc(AW.tx('finance', 'inv_' + id + '_desc', s))}</span>
             <div class="bets left">${btns}</div></div>
-          <div class="inv-val"><b class="gold">${v ? AW.fmtMoney(v) : '—'}</b>${v && open ? `<button class="btn sm" data-act="withdraw" data-id="${id}">贖回</button>` : ''}</div></div>`;
+          <div class="inv-val"><b class="gold">${v ? AW.fmtMoney(v) : '—'}</b>
+            ${v ? `<small class="muted">成本 ${AW.fmtMoney(pos.cost)}</small><small class="${pos.pl >= 0 ? 'ok' : 'bad'}">${esc(F.fmtPL(pos.pl, pos.pct))}</small>` : ''}
+            ${v && open ? `<button class="btn sm" data-act="withdraw" data-id="${id}">贖回</button>` : ''}</div></div>`;
       }).join('');
       const loans = f.loans.map((l) => `<div class="c-row"><span>${esc(AW.tx('finance', 'line_loan_' + l.id, s))}</span><span>每年 ${AW.fmtMoney(l.pay)}・還剩 ${l.left} 年</span></div>`).join('');
       return `<h3>💰 理財 <span class="pill gold">💰 ${AW.fmtMoney(money)}</span>${f.taxTotal ? `<span class="pill">🧾 累計繳稅 ${AW.fmtMoney(f.taxTotal)}</span>` : ''}</h3>
@@ -896,10 +908,26 @@
         <div class="tabs styles">${styles}</div>
         <p class="muted small">${esc(AW.tx('finance', 'style_hint', s))}</p>
         <h4 class="shop-h">📈 投資 <small>${esc(AW.tx('finance', 'inv_hint', s))}</small></h4>
+        ${this.rInvestSummary(s)}
         ${inv}
         ${loans ? `<h4 class="shop-h">🏦 貸款</h4>${loans}` : ''}
         ${E.canFire(s) || s.phase === 'ended' ? '' : (s.age >= 30 ? `<p class="muted small">🏖️ 財富自由目標：35～49 歲時身家 ${AW.fmtMoney(E.fireTarget(s))}（每年開銷 × 25，最少 ${AW.fmtMoney(E.FIRE.min)}），且心情 70 以上</p>` : '')}
         <div class="row end"><button class="btn primary" data-act="close-modal">關閉</button></div>`;
+    },
+
+    // 投資總覽：市值、成本、未實現損益、已實現損益
+    rInvestSummary(s) {
+      const F = AW.Finance;
+      const v = F.invested(s);
+      const cost = F.investCost(s);
+      const pl = v - cost;
+      const real = s.fin.realized || 0;
+      if (!v && !real) return '';
+      return `<div class="invest-sum">
+        <span>市值 <b class="gold">${AW.fmtMoney(v)}</b></span>
+        <span>成本 <b>${AW.fmtMoney(cost)}</b></span>
+        <span>未實現損益 <b class="${pl >= 0 ? 'ok' : 'bad'}">${esc(F.fmtPL(pl, cost ? pl / cost : null))}</b></span>
+        <span>已實現損益 <b class="${real >= 0 ? 'ok' : 'bad'}">${esc(F.fmtPL(real))}</b></span></div>`;
     },
 
     // ======================= 朋友 =======================
@@ -923,7 +951,7 @@
       const unmet = AW.NPC_ORDER.length - AW.NPC.metList(s).length;
       const rival = s.rival ? `<p class="muted small">🔥 宿敵王選手：${esc(s.rival.team)}（${AW.Esports.TIERS[s.rival.tier].name}），你的戰績 ${s.rival.w} 勝 ${s.rival.l} 敗</p>` : '';
       return `<h3>👥 朋友</h3>
-        <p class="muted small">「🎮 揪團開黑」可以提升開黑朋友的好友度，胡投顧則要靠「💹 找胡投顧聊投資」或交際類行動；太久沒聯絡，好友度會慢慢下降（人緣 60 以上下降較慢）。${unmet ? `還有 ${unmet} 位朋友沒認識，人緣越高越容易遇到。` : ''}</p>
+        <p class="muted small">「🎮 揪團開黑」可以提升開黑朋友的好友度（胡投顧只加一半，主要靠「💹 找胡投顧聊投資」或交際類行動）；太久沒聯絡，好友度會慢慢下降（人緣 60 以上下降較慢）。${unmet ? `還有 ${unmet} 位朋友沒認識，人緣越高越容易遇到。` : ''}</p>
         ${rival}${cards}
         <div class="row end"><button class="btn primary" data-act="close-modal">關閉</button></div>`;
     },

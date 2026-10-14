@@ -1,5 +1,6 @@
 /* 朋友 NPC（暱稱、介紹等文字在 js/data/texts.js 的 [npc.代號]）
  * gamer: 一起開黑的朋友（「揪團開黑」會提升好友度）
+ * squad: 不是開黑朋友，但也會一起開黑；揪團開黑時好友度只加這個比例（胡投顧 0.5）
  * minAge: 幾歲起可能認識；base: 每年認識的基礎機率（再乘上人緣）
  * likes: 當年做了這些行動，認識機率更高
  */
@@ -9,7 +10,7 @@
   const GAME_ACTS = ['play_fps', 'play_dota', 'netcafe', 'friends', 'ranked_night', 'amateur', 'lockdown', 'uni_game', 'uni_club', 'squad'];
 
   AW.NPCS = {
-    hu: { gamer: false, minAge: 15, base: 0.06, likes: ['friends', 'uni_club', 'networking', 'parttime'] },
+    hu: { gamer: false, squad: 0.5, minAge: 15, base: 0.06, likes: ['friends', 'uni_club', 'networking', 'parttime'] },
     haji: { gamer: true, minAge: 9, base: 0.11, likes: GAME_ACTS },
     wang: { gamer: true, minAge: 9, base: 0.11, likes: ['play_fps', 'netcafe', 'ranked_night', 'amateur', 'lockdown', 'squad'] },
     fang: { gamer: true, minAge: 9, base: 0.09, likes: GAME_ACTS },

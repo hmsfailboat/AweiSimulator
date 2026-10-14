@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const AW = (root.AW = root.AW || {});
-  AW.VERSION = '1.2'; // 發布新版時同步更新 CHANGELOG.md
+  AW.VERSION = '2.0'; // 發布新版時同步更新 CHANGELOG.md
 
   // ---------- 隨機數（mulberry32，可存檔重現） ----------
   AW.rng = {

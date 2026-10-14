@@ -155,7 +155,7 @@
 
     // ---------------- 朋友（認識開黑朋友後） ----------------
     { id: 'squad', stages: ['elem', 'junior', 'senior', 'extra', 'pro', 'uni', 'job', 'startup'].concat(SECOND), tags: ['game'],
-      cond: (s) => AW.NPC.gamers(s).length > 0, hideLocked: true,
+      cond: (s) => AW.NPC.squadMembers(s).length > 0, hideLocked: true,
       effects: { mood: 8, best: 2, social: 2, health: -2 },
       run(s) { return { text: '', deltas: {}, bonds: AW.NPC.squad(s) }; } },
 
@@ -225,7 +225,7 @@
         if (AW.chance(0.15)) { s.flags.bigFish = 1; return { text: AW.tx('action.fishing', 'msg_big', s) }; }
         return { text: '' };
       } },
-    { id: 'elder_squad', stages: OLD, tags: ['game'], cond: (s) => AW.NPC.gamers(s).length > 0, hideLocked: true,
+    { id: 'elder_squad', stages: OLD, tags: ['game'], cond: (s) => AW.NPC.squadMembers(s).length > 0, hideLocked: true,
       effects: { mood: 10, best: 1 }, run(s) { return { text: '', deltas: {}, bonds: AW.NPC.squad(s) }; } },
     { id: 'charity', stages: OLD.concat('biz', 'chairman'), cond: (s) => s.stats.money >= 1000000,
       run(s) {

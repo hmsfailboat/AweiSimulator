@@ -1,5 +1,5 @@
 /* 金錢：所得稅、生活水準、貸款、雇員薪水、投資、負債與破產
- * s.fin = { style, down, income, year, taxTotal, debtYears, inv: { 商品: 金額 }, loans: [{ id, left, pay }] }
+ * s.fin = { style, down, income, year, taxTotal, debtYears, inv: { 商品: 市值 }, cost: { 商品: 投入成本 }, realized: 已實現損益, loans: [{ id, left, pay }] }
  * 名稱與說明文字在 js/data/texts.js 的 [finance]
  */
 (function (root) {
@@ -32,7 +32,9 @@
     STYLES, PRODUCTS, TAX, DEBT, SHARK,
 
     init(s) {
-      s.fin = Object.assign({ style: 1, down: 0, income: 0, lastIncome: 0, year: null, taxTotal: 0, debtYears: 0, inv: {}, loans: [] }, s.fin || {});
+      s.fin = Object.assign({ style: 1, down: 0, income: 0, lastIncome: 0, year: null, taxTotal: 0, debtYears: 0, inv: {}, cost: {}, realized: 0, loans: [] }, s.fin || {});
+      // 舊存檔沒有成本紀錄：以目前市值當作成本
+      for (const id of Object.keys(s.fin.inv)) if (s.fin.cost[id] == null) s.fin.cost[id] = s.fin.inv[id];
       return s.fin;
     },
 
@@ -117,30 +119,72 @@
     // ---------- 投資 ----------
     productOk(s, id) { const p = PRODUCTS[id]; return !!p && (!p.need || p.need(s)); },
     invested(s) { return Object.values(s.fin.inv).reduce((a, v) => a + v, 0); },
+    investCost(s) { return Object.keys(s.fin.inv).reduce((a, id) => a + (s.fin.cost[id] || 0), 0); },
     netWorth(s) { return s.stats.money + this.invested(s); },
+    // 單一商品的未實現損益 { v 市值, cost 成本, pl 損益, pct 報酬率 }
+    position(s, id) {
+      const v = s.fin.inv[id] || 0;
+      const cost = s.fin.cost[id] || 0;
+      return { v, cost, pl: v - cost, pct: cost ? (v - cost) / cost : 0 };
+    },
+    fmtPL(pl, pct) {
+      return `${pl >= 0 ? '+' : '-'}${AW.fmtMoney(Math.abs(pl))}${pct != null ? `（${pct >= 0 ? '+' : ''}${(pct * 100).toFixed(1)}%）` : ''}`;
+    },
+    // 賣出一部分（依比例扣掉成本），回傳 { cash 拿回的錢, pl 實現損益 }
+    sell(s, id, amount) {
+      const f = s.fin;
+      const v = f.inv[id] || 0;
+      amount = Math.min(v, Math.max(0, Math.round(amount)));
+      if (!amount) return { cash: 0, pl: 0 };
+      const costPart = Math.round((f.cost[id] || 0) * amount / v);
+      f.inv[id] = v - amount;
+      f.cost[id] = (f.cost[id] || 0) - costPart;
+      if (!f.inv[id]) { delete f.inv[id]; delete f.cost[id]; }
+      const pl = amount - costPart;
+      f.realized = (f.realized || 0) + pl;
+      return { cash: amount, pl, pct: costPart ? pl / costPart : 0 };
+    },
     invest(s, id, amount) {
       if (!this.canManage(s) || !AW.Shop.open(s) || !this.productOk(s, id)) return false;
       amount = amount === 'all' ? s.stats.money : Math.round(amount);
       if (amount <= 0 || amount > s.stats.money) return false;
       AW.applyEffects(s, { money: -amount });
       s.fin.inv[id] = (s.fin.inv[id] || 0) + amount;
-      AW.Engine.addLog(s, '📈', `投入 ${AW.fmtMoney(amount)} 到「${AW.tx('finance', 'inv_' + id, s)}」`);
+      s.fin.cost[id] = (s.fin.cost[id] || 0) + amount;
+      AW.Engine.addLog(s, '📈', `投入 ${AW.fmtMoney(amount)} 到「${AW.tx('finance', 'inv_' + id, s)}」（成本合計 ${AW.fmtMoney(s.fin.cost[id])}）`);
       AW.Save.save(s);
       return true;
     },
     withdraw(s, id) {
       const v = s.fin.inv[id] || 0;
       if (!v || !AW.Shop.open(s)) return false;
-      delete s.fin.inv[id];
-      AW.applyEffects(s, { money: v });
-      AW.Engine.addLog(s, '💵', `贖回「${AW.tx('finance', 'inv_' + id, s)}」${AW.fmtMoney(v)}`);
+      const r = this.sell(s, id, v);
+      AW.applyEffects(s, { money: r.cash });
+      AW.Engine.addLog(s, r.pl >= 0 ? '💵' : '💸', `贖回「${AW.tx('finance', 'inv_' + id, s)}」${AW.fmtMoney(r.cash)}，實現損益 ${this.fmtPL(r.pl, r.pct)}`);
       AW.Save.save(s);
       return true;
     },
     liquidate(s) {
-      const v = this.invested(s);
-      if (v) AW.applyEffects(s, { money: v });
+      let cash = 0;
+      let pl = 0;
+      for (const id of Object.keys(s.fin.inv)) { const r = this.sell(s, id, s.fin.inv[id]); cash += r.cash; pl += r.pl; }
+      if (cash) {
+        AW.applyEffects(s, { money: cash });
+        AW.Engine.addLog(s, '💵', `投資全部換成現金 ${AW.fmtMoney(cash)}，實現損益 ${this.fmtPL(pl)}`);
+      }
       s.fin.inv = {};
+      s.fin.cost = {};
+    },
+    // 離婚：每項投資分走 frac（市值與成本按比例）
+    splitShare(s, frac) {
+      let out = 0;
+      for (const id of Object.keys(s.fin.inv)) {
+        const v = Math.round(s.fin.inv[id] * frac);
+        s.fin.inv[id] -= v;
+        s.fin.cost[id] = Math.round((s.fin.cost[id] || 0) * (1 - frac));
+        out += v;
+      }
+      return out;
     },
 
     beginYear(s) { s.fin.income = 0; s.fin.year = null; },
@@ -156,7 +200,8 @@
         y.lines.push(Object.assign({ key, v: -v }, extra || {}));
       };
 
-      // 投資損益（不分出社會與否）
+      // 投資損益（不分出社會與否），每項商品記在人生紀錄
+      const parts = [];
       for (const id of Object.keys(f.inv)) {
         const p = PRODUCTS[id];
         if (!p) continue;
@@ -164,7 +209,10 @@
         const g = Math.round(f.inv[id] * r);
         f.inv[id] += g;
         y.invest += g;
+        const pos = this.position(s, id);
+        parts.push(`${AW.tx('finance', 'inv_' + id, s)} ${g >= 0 ? '+' : '-'}${AW.fmtMoney(Math.abs(g))}（${r >= 0 ? '+' : ''}${(r * 100).toFixed(1)}%，累計 ${this.fmtPL(pos.pl, pos.pct)}）`);
       }
+      if (parts.length) AW.Engine.addLog(s, y.invest >= 0 ? '📈' : '📉', `投資年度損益 ${y.invest >= 0 ? '+' : '-'}${AW.fmtMoney(Math.abs(y.invest))}：${parts.join('、')}`);
       if (y.invest >= 5000000) s.flags.bigInvest = 1;
 
       if (this.active(s)) {
@@ -203,17 +251,17 @@
       if (s.stats.money < 0 && this.invested(s)) {
         let need = -s.stats.money;
         let sold = 0;
+        let pl = 0;
         for (const id of Object.keys(PRODUCTS)) {
           const v = f.inv[id] || 0;
           if (!v || need <= 0) continue;
-          const take = Math.min(v, need);
-          f.inv[id] = v - take;
-          if (!f.inv[id]) delete f.inv[id];
-          need -= take;
-          sold += take;
+          const r = this.sell(s, id, Math.min(v, need));
+          need -= r.cash;
+          sold += r.cash;
+          pl += r.pl;
         }
         AW.applyEffects(s, { money: sold });
-        AW.Engine.note(s, '💵', AW.tx('finance', 'msg_auto_sell', s, { 金額: AW.fmtMoney(sold) }));
+        AW.Engine.note(s, '💵', AW.tx('finance', 'msg_auto_sell', s, { 金額: AW.fmtMoney(sold), 損益: this.fmtPL(pl) }));
       }
       // 負債：利息、壓力、破產
       if (s.stats.money < 0) {
