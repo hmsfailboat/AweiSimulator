@@ -372,7 +372,7 @@
       const g = s.second;
       const S = AW.Second;
       const turn = S.turnYears(s) > 1 ? `<div class="c-row muted small"><span>⏩ 每回合 ${S.turnYears(s)} 年</span><span>${s.age >= S.ELDER_AGE ? '每年 1 個行動' : ''}</span></div>` : '';
-      if (s.age >= S.ELDER_AGE || g.job === 'retired') {
+      if (!S.working(s)) {
         return `<div class="career"><div class="c-row"><span>${s.age >= S.ELDER_AGE ? '🧓 晚年生活' : '🎣 退休生活'}</span><span class="muted">${g.was ? `前${esc(AW.tx('second', 'job_' + g.was, s))}` : ''}</span></div>${turn}</div>`;
       }
       if (g.job === 'streamer') {
@@ -392,8 +392,8 @@
       const track = ST.map((x, i) => `<span class="${i < g.stage ? 'done' : i === g.stage ? 'cur' : ''}" title="${esc(AW.tx('second', key + i, s))}">${x.icon}</span>`).join('<i>›</i>');
       return `<div class="career"><div class="c-row"><span>${chair ? '👑' : '🏪'} ${esc(g.name)}</span><span class="muted">${esc(AW.tx('second', key + g.stage, s))}</span></div>
         <div class="track">${track}</div>
-        ${chair ? `<div class="c-row"><span>董事會信任</span><span>${g.bad ? '⚠️ 不滿 ' + g.bad + '/2' : '👍 穩定'}</span></div>`
-          : `<div class="c-row"><span>資金跑道 ${'🔋'.repeat(Math.max(0, g.runway))}${'🪫'.repeat(Math.max(0, 3 - g.runway))}</span>${g.partner ? `<span class="muted">合夥：${esc(AW.NPC.name(g.partner))}</span>` : ''}</div>`}${turn}</div>`;
+        ${chair ? `<div class="c-row"><span>董事會信任</span><span>${g.bad ? '⚠️ 不滿 ' + g.bad + '/' + S.VENTURE.oust : '👍 穩定'}</span></div>`
+          : `<div class="c-row"><span>資金跑道 ${'🔋'.repeat(Math.max(0, g.runway))}${'🪫'.repeat(Math.max(0, S.VENTURE.runway - g.runway))}</span>${g.partner ? `<span class="muted">合夥：${esc(AW.NPC.name(g.partner))}</span>` : ''}</div>`}${turn}</div>`;
     },
 
     rLog(s) {
@@ -494,13 +494,49 @@
           ${ok ? '' : `<div class="ac-lock">🔒 ${esc(reason)}</div>`}
         </button>`;
       }).join('');
-      const can = u.selected.length >= Math.min(n, list.filter((x) => x.ok).length) && u.selected.length > 0;
+      const agendaReady = !s.agenda || s.agenda.pick != null;
+      const can = agendaReady && u.selected.length >= Math.min(n, list.filter((x) => x.ok).length) && u.selected.length > 0;
       const label = s.phase === 'esports' ? '開始賽季 ▶' : this.hasSeason(s) ? '開始這一年的挑戰 ▶' : '結束這一年 ▶';
-      return `<section class="card">
+      return `${this.rAgenda(s)}<section class="card">
         <h3>${s.phase === 'esports' ? '選擇本季的訓練重點' : '選擇今年要做的事'} <span class="pill ${u.selected.length === n ? 'ok' : ''}">${u.selected.length} / ${n}</span></h3>
         <p class="muted small">數值為基礎值，實際成長受天賦、年齡、心情與目前數值（越高越難練）影響。</p>
         <div class="action-grid">${cards}</div>
         <div class="row end sticky-go"><button class="btn primary big" data-act="commit" ${can ? '' : 'disabled'}>${label}</button></div>
+      </section>`;
+    },
+
+    // 年度議題（v2.1）：董事長、企業家在行動階段選擇今年的方針
+    rAgenda(s) {
+      if (!s.agenda) return '';
+      const S = AW.Second;
+      const id = s.agenda.id;
+      const chip = (cls, text) => `<span class="chip ${cls}">${esc(text)}</span>`;
+      const cards = S.agendaOptions(s).map(({ o, i, ok, cost, reason }) => {
+        let chips = '';
+        if (o.b) chips += chip(o.b > 0 ? 'up' : 'down', `經營實力 ${o.b > 0 ? '+' : ''}${o.b}`);
+        if (o.up) chips += chip('info', `${o.up} 季達標就成長`);
+        if (o.grow === false) chips += chip('info', '今年不擴張');
+        if (o.div) chips += chip(o.div > 1 ? 'gold' : 'down', `分紅 ×${o.div}`);
+        if (o.risk) chips += chip('down', `沒成長多燒 ${o.risk} 年資金`);
+        if (o.vote) chips += chip('info', '🗳️ 需要表決');
+        if (o.fame) chips += chip('info', `成長時名氣 +${o.fame}`);
+        if (o.bond && s.second.partner) chips += chip(o.bond > 0 ? 'up' : 'down', `${AW.NPC.name(s.second.partner)} ${o.bond > 0 ? '+' : ''}${o.bond}`);
+        chips += this.chips(AW.previewEffects(s, o.effects));
+        if (cost) chips += this.chip('money', -cost);
+        if (!chips) chips = chip('info', '照原本的步調');
+        const sel = s.agenda.pick === i;
+        return `<button class="action-card ${sel ? 'selected' : ''} ${ok ? '' : 'disabled'}" data-act="agenda" data-i="${i}" ${ok ? '' : 'disabled'}>
+          <div class="ac-head"><span class="ac-name">${esc(S.agendaLabel(s, id, i))}</span>${o.def ? '<span class="pill">預設</span>' : ''}${sel ? '<span class="ac-check">✓</span>' : ''}</div>
+          <div class="ac-desc">${esc(S.agendaText(s, id, 'desc' + (i + 1)))}</div>
+          <div class="chips-row">${chips}</div>
+          ${ok ? '' : `<div class="ac-lock">🔒 ${esc(reason)}</div>`}
+        </button>`;
+      }).join('');
+      return `<section class="card">
+        <h3>${esc(AW.tx('second', 'agenda_head_' + s.second.job, s))}：${esc(S.agendaText(s, id, 'name'))}</h3>
+        <p>${esc(S.agendaText(s, id, 'text'))}</p>
+        <p class="muted small">${esc(AW.tx('second', 'agenda_hint', s))}</p>
+        <div class="action-grid">${cards}</div>
       </section>`;
     },
 
@@ -889,7 +925,7 @@
       const styles = F.STYLES.map((st, i) => `<button class="tab ${f.style === i ? 'on' : ''}" data-act="set-style" data-i="${i}" ${open ? '' : 'disabled'}>
         ${esc(AW.tx('finance', 'style_' + st.id, s))}<small>${esc(AW.tx('finance', 'style_' + st.id + '_desc', s))}</small></button>`).join('');
       const money = s.stats.money;
-      const amts = [100000, 1000000, 10000000].filter((a) => a <= money);
+      const amts = [100000, 1000000, 10000000, 100000000, 1000000000].filter((a) => a <= money);
       const inv = Object.keys(F.PRODUCTS).filter((id) => F.productOk(s, id) || f.inv[id]).map((id) => {
         const pos = F.position(s, id);
         const v = pos.v;
@@ -1086,7 +1122,7 @@
             <li>🎰 <b>賭場</b>（18 歲起）：骰寶和拉霸每年合計 10 次，彩券另外可以買 10 次。十賭九輸，小賭怡情。</li>
             <li>💕 <b>感情</b>：告白或邂逅成功後開始交往。不約會的話好感度每年下降，太低會分手；感情穩定可以求婚、結婚。</li>
             <li>🎬 <b>章節</b>：拿到世界冠軍、當上大老闆、退役或退休時，可以選擇「就此落幕」結算，或「繼續人生」進入第二幕。</li>
-            <li>🛤️ <b>人生第二幕</b>：實況主（目標百萬訂閱）、電競教練（冠軍教練）、創業從商或董事長（商業大亨）、退休享福。50 歲後每回合 2 年，65 歲後每回合 3 年、每年 1 個行動。</li>
+            <li>🛤️ <b>人生第二幕</b>：實況主（目標百萬訂閱）、電競教練（冠軍教練）、創業從商或董事長（商業大亨）、退休享福。董事長和企業家每年要決定一個經營方針（董事會議題）。還在工作時每回合 1 年（企業家、董事長可以做到 70 歲，其他工作 65 歲）；退休後 50 歲起每回合 2 年，65 歲後每回合 3 年、每年 1 個行動。</li>
             <li>🕯️ <b>晚年</b>：60 歲會寫下遺願清單；年紀越大、健康越差，越可能離開人世。最後的告別式上，好朋友們會來送你一程。</li>
             <li>👨‍👩‍👧 <b>家庭</b>：結婚後可能有孩子，常陪孩子打電動，他們長大也許會成為職業選手。人緣很高時可能同時交往……小心修羅場。</li>
             <li>🧬 每局結束獲得傳承點，可購買永久升級與天賦。結婚、累積財富也能多拿傳承點。</li>
@@ -1224,6 +1260,9 @@
           u.selected.push(d.id);
         }
         this.render();
+      },
+      agenda(d) {
+        if (AW.Second.pickAgenda(this.S, +d.i)) this.render();
       },
       commit() {
         E.commitActions(this.S, this.ui.selected || []);

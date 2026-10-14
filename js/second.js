@@ -7,6 +7,9 @@
   const AW = root.AW;
 
   const ELDER_AGE = 65;
+  const JOBS = ['streamer', 'coach', 'biz', 'chairman'];
+  // 企業家、董事長可以做到 70 歲；其他工作 65 歲退休
+  const WORK_END = { biz: 70, chairman: 70 };
   const COACH_SALARY = [300000, 600000, 1200000, 2500000, 5000000];
   // 創業從商：每個階段的年度分紅、晉級獎金
   const BIZ_STAGES = [
@@ -33,10 +36,35 @@
   const COACH = { tactics: 0.4, roster: 0.6, penalty: 2, bonusMax: 8, bonusMin: -5, bonusDecay: 2, promote: 0.5 };
   const PENSION = 300000;
   // 經營評分：董事長 -chairBase - 階段 × chairStep；創業 - 階段 × bizStep；合夥朋友好友度 50 以上加 partner
-  const VENTURE = { chairBase: 27, chairStep: 12, bizStep: 12, partner: 6 };
+  // runway：創業的資金跑道（年）；oust：董事長連續幾年表現不佳會被趕下台
+  const VENTURE = { chairBase: 27, chairStep: 15, bizStep: 14, partner: 6, runway: 3, oust: 3 };
   const BIZ_COST = 3000000;
   const WISH_AGE = 60;
   const WISH_COUNT = 5;
+  // 接班人：退休賣股份時，公司價值倍率
+  const HEIR_VALUE = 1.5;
+
+  // 年度議題（v2.1）：董事長、企業家每年抽一個議題，在行動階段選擇方針
+  // 選項：b 經營實力加減；up 幾季達標就成長（預設 3）；grow: false 今年不擴張（2 季以上達標算「穩健」）
+  //       div 今年分紅倍率；cost 花費（× 公司階段 +1）；effects 年底套用的效果；risk 沒成長時資金跑道多扣幾年（創業）
+  //       vote 需要董事會表決，落選時改用 def 選項；bond 朋友好友度
+  // 文字在 [agenda.代號]：name、text、opt1…、opt1_desc…
+  const AGENDAS = {
+    overseas: { job: 'chairman', opts: [{ b: -5, up: 2, vote: true, fame: 3 }, { def: true }, { b: 6, grow: false, div: 1.3 }] },
+    ai_bet: { job: 'chairman', opts: [{ b: 9, cost: 30000000, vote: true }, { b: 4, cost: 5000000, def: true }, { div: 1.2 }] },
+    layoff: { job: 'chairman', opts: [{ b: 6, div: 1.5, effects: { fame: -6, mood: -6 } }, { b: 2, effects: { mood: -2 }, def: true },
+      { b: -3, effects: { fame: 4, leader: 2, mood: 3 } }] },
+    payout: { job: 'chairman', opts: [{ b: -5, div: 2 }, { def: true }, { b: 6, div: 0.5 }] },
+    merger: { job: 'chairman', opts: [{ up: 2, cost: 50000000, vote: true, fame: 3 }, { def: true }] },
+    pace: { job: 'biz', opts: [{ b: -5, up: 2, risk: 1 }, { def: true }, { b: 6, grow: false, div: 1.3 }] },
+    marketing: { job: 'biz', opts: [{ b: 7, cost: 1000000 }, { b: 3, effects: { social: 2 }, def: true }, { b: -2, div: 1.3 }] },
+    pricing: { job: 'biz', opts: [{ b: 4, div: 0.5 }, { def: true }, { b: -4, div: 1.6, effects: { fame: 2 } }] },
+    staff: { job: 'biz', opts: [{ b: 4, cost: 500000, effects: { mood: 2 } }, { def: true }, { b: -2, div: 1.3, effects: { mood: -2 } }] },
+    partner: { job: 'biz', cond: (s) => !!s.second.partner,
+      opts: [{ b: 4, bond: 6 }, { b: 1, bond: 2, def: true }, { b: 1, effects: { leader: 2 }, bond: -5 }] },
+  };
+  // 董事會表決：每席贊成機率；胡投顧好友度高時固定一票
+  const AGENDA_VOTE = { seats: 7, base: 0.5, min: 0.25, max: 0.8, huBond: 60 };
 
   // 遺願清單：cond 能不能出現；check 完成條件（也可以由事件直接完成）
   const WISHES = {
@@ -52,21 +80,24 @@
   };
 
   const Second = (AW.Second = {
-    ELDER_AGE, BIZ_STAGES, CHAIR_STAGES, THEMES, WISHES, COACH_SALARY,
+    ELDER_AGE, BIZ_STAGES, CHAIR_STAGES, THEMES, WISHES, COACH_SALARY, AGENDAS, VENTURE,
 
-    stageKey(s) { return s.age >= ELDER_AGE ? 'elder' : s.second.job; },
-    // 50 歲後一回合 2 年、65 歲後 3 年
-    turnYears(s) { return s.age >= ELDER_AGE ? 3 : s.age >= 50 ? 2 : 1; },
+    retireAge(job) { return WORK_END[job] || ELDER_AGE; },
+    // 還在工作（實況主、教練、企業家、董事長，且還沒到退休年齡）
+    working(s) { const g = s.second; return !!g && JOBS.includes(g.job) && s.age < this.retireAge(g.job); },
+    stageKey(s) { return this.working(s) || s.age < ELDER_AGE ? s.second.job : 'elder'; },
+    // 工作中每回合 1 年；退休後 50 歲起一回合 2 年、65 歲起 3 年
+    turnYears(s) { return this.working(s) ? 1 : s.age >= ELDER_AGE ? 3 : s.age >= 50 ? 2 : 1; },
     jobName(s) { return AW.tx('second', 'job_' + this.stageKey(s), s); },
     title(s) {
       const g = s.second;
-      if (s.age >= ELDER_AGE) return this.jobName(s);
+      if (!this.working(s) && s.age >= ELDER_AGE) return this.jobName(s);
       if (g.job === 'coach') return `${AW.Esports.TIERS[g.tier].name}・${g.team} 總教練`;
       if (g.job === 'biz') return `${g.name} 創辦人`;
       if (g.job === 'chairman') return `${g.name} 董事長`;
       return this.jobName(s);
     },
-    hasSeason(s) { return s.phase === 'second' && s.age < ELDER_AGE && ['streamer', 'coach', 'biz', 'chairman'].includes(s.second.job); },
+    hasSeason(s) { return s.phase === 'second' && this.working(s); },
 
     // ---------- 選擇第二幕 ----------
     // reason：剛完成的章節代號，或 'switch'（轉換跑道）、'ousted'（被趕下台）、'closed'（公司收掉）
@@ -136,7 +167,7 @@
         g.theme = opt.theme || this.pickTheme(s);
         g.partner = THEMES[g.theme].partner || null;
         g.stage = 0;
-        g.runway = 3;
+        g.runway = VENTURE.runway;
         g.name = AW.pick(AW.txList('second', 'names_' + g.theme));
         s.stats.leader = Math.max(s.stats.leader, Math.round(s.stats.social * 0.3 + s.stats.teamwork * 0.2));
         s.flags.bizStarts = (s.flags.bizStarts || 0) + 1;
@@ -158,12 +189,12 @@
 
     onNewYear(s) {
       const g = s.second;
-      // 65 歲：所有工作告一段落，進入晚年
-      if (s.age >= ELDER_AGE && g.job !== 'retired') {
+      // 到了退休年齡（65 歲，企業家、董事長 70 歲）：工作告一段落，進入晚年
+      if (s.age >= ELDER_AGE && g.job !== 'retired' && !this.working(s)) {
         if (g.job === 'biz' || g.job === 'chairman') {
           const v = this.companyValue(s);
           if (v) AW.applyEffects(s, { money: v });
-          AW.Engine.note(s, '🤝', AW.tx('second', 'msg_sell', s, { 公司: g.name, 金額: AW.fmtMoney(v) }));
+          AW.Engine.note(s, '🤝', AW.tx('second', g.heir ? 'msg_sell_heir' : 'msg_sell', s, { 公司: g.name, 金額: AW.fmtMoney(v) }));
         }
         AW.Engine.note(s, '🧓', AW.tx('second', 'msg_elder', s));
         s.second = { job: 'retired', since: s.age, was: g.job };
@@ -174,9 +205,55 @@
     // 退休或 65 歲時把公司股份賣掉
     companyValue(s) {
       const g = s.second;
-      if (g.job === 'biz') return BIZ_STAGES[g.stage].dividend * 5;
-      if (g.job === 'chairman') return CHAIR_STAGES[g.stage].dividend * 5;
+      const heir = g.heir ? HEIR_VALUE : 1;
+      if (g.job === 'biz') return BIZ_STAGES[g.stage].dividend * 5 * heir;
+      if (g.job === 'chairman') return CHAIR_STAGES[g.stage].dividend * 5 * heir;
       return 0;
+    },
+
+    // ---------- 年度議題（v2.1） ----------
+    beginYear(s) {
+      s.agenda = null;
+      const g = s.second;
+      if (!this.hasSeason(s) || !['biz', 'chairman'].includes(g.job)) return;
+      const pool = Object.keys(AGENDAS).filter((id) => AGENDAS[id].job === g.job && id !== g.lastAgenda && (!AGENDAS[id].cond || AGENDAS[id].cond(s)));
+      const id = AW.pick(pool);
+      g.lastAgenda = id;
+      s.agenda = { id, pick: null };
+    },
+    agendaCost(s, o) { return (o.cost || 0) * (s.second.stage + 1); },
+    // 目前議題的選項：{ o, i, ok, reason }
+    agendaOptions(s) {
+      const a = s.agenda && AGENDAS[s.agenda.id];
+      if (!a) return [];
+      return a.opts.map((o, i) => {
+        const cost = this.agendaCost(s, o);
+        const ok = !cost || s.stats.money >= cost;
+        return { o, i, ok, cost, reason: ok ? '' : `需要 ${AW.fmtMoney(cost)}` };
+      });
+    },
+    pickAgenda(s, i) {
+      const x = this.agendaOptions(s)[i];
+      if (!x || !x.ok) return false;
+      s.agenda.pick = i;
+      return true;
+    },
+    agendaDefault(a) { return Math.max(0, a.opts.findIndex((o) => o.def)); },
+    // 議題文字：可以用 {合夥人}
+    agendaText(s, id, key) { return AW.tx('agenda.' + id, key, s, { 合夥人: s.second.partner ? AW.NPC.name(s.second.partner) : '' }); },
+    agendaLabel(s, id, i) { return this.agendaText(s, id, 'opt' + (i + 1)); },
+
+    // 董事會表決：7 席逐票開出，過半通過
+    agendaVote(s, id) {
+      const st = s.stats;
+      const V = AGENDA_VOTE;
+      const q = AW.clamp(V.base + (st.leader - 70) / 60 + (st.social - 60) / 80 - s.second.stage * 0.03, V.min, V.max);
+      const hu = AW.NPC.bond(s, 'hu') >= V.huBond;
+      const games = [];
+      for (let i = 0; i < V.seats; i++) games.push(hu && i === 0 ? true : AW.chance(q));
+      const w = games.filter(Boolean).length;
+      return { vote: true, round: AW.tx('office', 'board_round', s), oppName: AW.tx('agenda.' + id, 'name', s), opp: V.seats, p: q, bo: V.seats,
+        games, w, l: V.seats - w, won: w > V.seats / 2 };
     },
 
     // ---------- 每年的挑戰（有動畫） ----------
@@ -228,25 +305,48 @@
       return season;
     },
 
-    // 創業從商與董事長共用：4 季目標
+    // 創業從商與董事長共用：（董事會表決）→ 4 季目標
     runVenture(s) {
       const g = s.second;
       const st = s.stats;
       const chair = g.job === 'chairman';
+      const stages = [];
+      // 年度議題：沒選的話用預設方針；需要表決的方針落選時改用預設
+      const ag = s.agenda && AGENDAS[s.agenda.id];
+      let pick = null;
+      let voteFail = false;
+      if (ag) {
+        pick = s.agenda.pick != null ? s.agenda.pick : this.agendaDefault(ag);
+        if (ag.opts[pick].vote) {
+          const m = this.agendaVote(s, s.agenda.id);
+          stages.push({ name: AW.tx('second', 'stage_vote', s, { 議題: AW.tx('agenda.' + s.agenda.id, 'name', s) }), icon: '🗳️', matches: [m], passed: m.won,
+            note: AW.tx('second', m.won ? 'note_vote_ok' : 'note_vote_fail', s, { 贊成: m.w, 反對: m.l, 方針: this.agendaLabel(s, s.agenda.id, pick) }) });
+          if (!m.won) { voteFail = true; pick = this.agendaDefault(ag); }
+        }
+      }
+      const o = ag ? ag.opts[pick] : {};
       let B;
       if (chair) B = 0.4 * st.tech + 0.35 * st.leader + 0.25 * st.social + (s.yearSp || 0) * 3 - VENTURE.chairBase - g.stage * VENTURE.chairStep;
       else B = 0.3 * st.social + 0.3 * st.leader + 0.4 * st[THEMES[g.theme].stat] + (s.yearSp || 0) * 3
         + (g.partner && AW.NPC.bond(s, g.partner) >= 50 ? VENTURE.partner : 0) - g.stage * VENTURE.bizStep;
       B -= st.health < AW.TIER.low ? 4 : 0;
+      B += o.b || 0;
       const p = AW.clamp(AW.logistic(B - 50, 8), 0.03, 0.97);
       const goals = AW.shuffle(AW.txList('second', chair ? 'chair_goals' : 'biz_goals')).slice(0, 4);
       const matches = goals.map((name, i) => Object.assign(AW.playSeries(p, 1), { round: `Q${i + 1}`, oppName: name, opp: 50 }));
       const W = matches.filter((m) => m.won).length;
-      const result = W >= 3 ? 'up' : W >= 1 ? 'hold' : 'bad';
-      const stages = [{ name: AW.tx('second', chair ? 'stage_chair' : 'stage_biz', s), icon: chair ? '📊' : '📈', matches, passed: W >= 3,
-        note: AW.tx('second', 'note_venture_' + result, s, { 達標: W }) }];
+      const upAt = o.up || 3;
+      // up 成長；steady 穩健（不扣資金跑道、董事會滿意）；hold 持平；bad 一季都沒達標
+      // 不擴張的方針：1 季達標就算穩健
+      let result;
+      if (o.grow === false) result = W >= 1 ? 'steady' : 'bad';
+      else result = W >= upAt ? 'up' : W >= 2 ? 'steady' : W >= 1 ? 'hold' : 'bad';
+      const plan = ag ? AW.tx('second', 'stage_plan', s, { 方針: this.agendaLabel(s, s.agenda.id, pick) }) : '';
+      stages.push({ name: AW.tx('second', chair ? 'stage_chair' : 'stage_biz', s) + plan, icon: chair ? '📊' : '📈', matches,
+        passed: result === 'up' || result === 'steady',
+        note: AW.tx('second', 'note_venture_' + result, s, { 達標: W, 門檻: upAt }) });
       return { kind: 'venture', title: AW.tx('second', chair ? 'title_chair' : 'title_biz', s, { 公司: g.name }),
-        pill: `經營實力 ${Math.round(B)}`, stages, result: { W, result } };
+        pill: `經營實力 ${Math.round(B)}`, stages, result: { W, result, agenda: ag ? { id: s.agenda.id, pick, voteFail } : null } };
     },
 
     // ---------- 年末結算 ----------
@@ -315,14 +415,35 @@
       }
     },
 
+    // 年度議題的方針：花費、效果、好友度（動畫播完才套用，避免劇透表決結果）
+    settleAgenda(s, a) {
+      const g = s.second;
+      const o = AGENDAS[a.id].opts[a.pick];
+      const cost = this.agendaCost(s, o);
+      if (cost) AW.applyEffects(s, { money: -cost });
+      if (o.effects) AW.applyEffects(s, o.effects);
+      if (o.bond && g.partner) AW.NPC.addBond(s, g.partner, o.bond);
+      AW.Engine.note(s, '📋', AW.tx('second', a.voteFail ? 'msg_agenda_fail' : 'msg_agenda', s,
+        { 議題: AW.tx('agenda.' + a.id, 'name', s), 方針: this.agendaLabel(s, a.id, a.pick) }));
+      return o;
+    },
+
     settleVenture(s, r) {
       const g = s.second;
       const chair = g.job === 'chairman';
       const ST = chair ? CHAIR_STAGES : BIZ_STAGES;
       const name = (i) => AW.tx('second', (chair ? 'chair_stage_' : 'biz_stage_') + i, s);
-      if (r.result === 'up' && g.stage < ST.length - 1) {
+      const o = r.agenda ? this.settleAgenda(s, r.agenda) : {};
+      const div = o.div || 1;
+      if (r.result === 'steady') {
+        // 穩健經營：沒有擴張，但也不會扣資金跑道、董事會滿意
+        g.bad = 0;
+        AW.applyEffects(s, { mood: 3 });
+        AW.Engine.note(s, '🛡️', AW.tx('second', 'msg_venture_steady', s, { 公司: g.name }));
+      } else if (r.result === 'up' && g.stage < ST.length - 1) {
+        if (o.fame) AW.applyEffects(s, { fame: o.fame });
         g.stage += 1;
-        g.runway = 3;
+        g.runway = VENTURE.runway;
         g.bad = 0;
         AW.applyEffects(s, { money: ST[g.stage].bonus, mood: 10, fame: 4 });
         AW.Engine.note(s, ST[g.stage].icon, AW.tx('second', 'msg_venture_up', s, { 公司: g.name, 階段: name(g.stage) }));
@@ -333,14 +454,21 @@
       } else if (r.result !== 'up') {
         AW.applyEffects(s, { mood: r.result === 'bad' ? -8 : -2 });
         if (chair) {
-          g.bad = r.W <= 1 ? (g.bad || 0) + 1 : 0;
-          if (g.bad >= 2) return this.ousted(s);
+          // 一季都沒達標，董事會不滿 +1；達標 1 季維持不變
+          if (r.result === 'bad') g.bad = (g.bad || 0) + 1;
+          if (g.bad >= VENTURE.oust) return this.ousted(s);
         } else {
-          g.runway -= r.result === 'hold' ? 1 : 2;
-          if (g.runway <= 0) return this.closeBiz(s);
+          g.runway -= (r.result === 'hold' ? 1 : 2) + (o.risk || 0);
+          // 資金燒完：已經展店的話先收掉分店（退一個階段），第一家店才會倒閉
+          if (g.runway <= 0 && g.stage > 0) {
+            g.stage -= 1;
+            g.runway = VENTURE.runway;
+            AW.applyEffects(s, { mood: -10, fame: -3 });
+            AW.Engine.note(s, '📉', AW.tx('second', 'msg_venture_shrink', s, { 公司: g.name, 階段: name(g.stage) }));
+          } else if (g.runway <= 0) return this.closeBiz(s);
         }
       }
-      AW.Finance.earn(s, ST[g.stage].dividend);
+      AW.Finance.earn(s, Math.round(ST[g.stage].dividend * div));
     },
 
     ousted(s) {

@@ -215,6 +215,7 @@
       s.review = null;
       s.yearStart = Object.assign({}, s.stats);
       AW.Finance.beginYear(s);
+      if (s.phase === 'second') AW.Second.beginYear(s);
       s.pendingEvents = this.rollEvents(s);
       s.step = s.pendingEvents.length ? 'event' : 'action';
       this.checkAchievements(s);
@@ -229,10 +230,11 @@
         !(e.once && s.seen[e.id]) &&
         !(e.threat && guard) &&
         (!e.cond || e.cond(s)));
-      const out = [];
+      // force：連續事件的後續，條件成立就一定發生
+      const out = pool.filter((e) => e.force).map((e) => e.id);
       const count = s.age === 0 ? 0 : AW.chance(0.25) ? 2 : 1;
-      for (let i = 0; i < count; i++) {
-        const cands = pool.filter((e) => !out.includes(e.id));
+      for (let i = out.length; i < count; i++) {
+        const cands = pool.filter((e) => !out.includes(e.id) && !e.force);
         const e = AW.weightedPick(cands, (x) => AW.val(x.weight, s) || 1);
         if (e) out.push(e.id);
       }
@@ -454,7 +456,7 @@
     // 長期健康：生活壓力、年齡衰退、慢性病、體弱多病
     healthYear(s) {
       // 生活壓力：青少年與成人每年心情自然下降
-      const retired = s.phase === 'second' && (s.second.job === 'retired' || s.age >= AW.Second.ELDER_AGE);
+      const retired = s.phase === 'second' && !AW.Second.working(s);
       const stress = s.phase === 'student' ? (s.age >= 12 ? this.STRESS.teen : 0) : retired ? this.STRESS.retired : this.STRESS.adult + this.jobStress(s);
       if (stress) AW.applyEffects(s, { mood: -stress });
       const aging = this.AGING.find(([age]) => s.age >= age);

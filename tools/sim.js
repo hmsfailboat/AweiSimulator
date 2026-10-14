@@ -22,6 +22,13 @@ if (AW.Text.missing.length || AW.Text.warnings.length) {
   console.log('⚠️ 文本問題：\n' + AW.Text.missing.concat(AW.Text.warnings).join('\n'));
   process.exitCode = 1;
 }
+// docs/ENDINGS.md 要列出所有結局（**名稱**）與成就（| 圖示 | 名稱 |）
+{
+  const doc = fs.readFileSync(path.join(ROOT, 'docs/ENDINGS.md'), 'utf8');
+  const lost = Object.values(AW.ENDINGS).filter((e) => !doc.includes(`**${e.name}**`)).map((e) => '結局 ' + e.name)
+    .concat(AW.ACHIEVEMENTS.filter((a) => !doc.includes(`| ${a.icon} | ${a.name} |`)).map((a) => '成就 ' + a.name));
+  if (lost.length) { console.log('⚠️ docs/ENDINGS.md 缺少：' + lost.join('、')); process.exitCode = 1; }
+}
 // 遊玩中才取用的文本（AW.tx），缺少的話在最後列出
 const missingAtLoad = AW.Text.missing.length;
 process.on('exit', () => {
@@ -164,6 +171,11 @@ function playRun(strat, opts) {
       const prefs = s.phase === 'student' ? st.student : s.phase === 'esports' ? proPrefs : s.phase === 'second' ? secondPrefs : engPrefs;
       if (s.phase === 'second') res.jobs[AW.Engine.stageKey(s)] = 1;
       res.turns += 1;
+      // 年度議題：隨機選一個付得起的方針
+      if (s.agenda) {
+        const ok = AW.Second.agendaOptions(s).filter((x) => x.ok);
+        if (ok.length) AW.Second.pickAgenda(s, ok[Math.floor(R() * ok.length)].i);
+      }
       E.commitActions(s, pickActions(s, prefs, st.grind));
     } else if (s.step === 'season') {
       E.seasonDone(s);

@@ -8,6 +8,7 @@
  *   year: 本年度暫時旗標（例 noGame）；next: 下一年旗標；flags: 永久旗標
  * phase: student / esports / engineer / second（第二幕與晚年）/ any，也可以是陣列，例 ['student', 'esports']
  * threat: true → 雇用保全後不會發生；bond 也可以是 (s) => ({ 代號: 變化 })
+ * force: true → 條件成立時一定發生（連續事件的後續，例：併購案隔年的整合）
  * 無 choices 的事件本身就是一個 outcome。
  * choice: { cond, ...outcome } 或 { cond, roll: { chance, success, fail } }
  *   hideLocked: 條件不符時整個選項不顯示（預設是顯示成灰色）
@@ -24,6 +25,13 @@
   const bond = (s, id) => AW.NPC.bond(s, id);
   const adult = (s) => s.age >= 18;
   const hasDebt = (s) => s.stats.money < 0;
+  // 第二幕：正在做某個工作（還沒到退休年齡）
+  const job = (id) => (s) => s.second.job === id && AW.Second.working(s);
+  // 併購案金額、業配與平台簽約金、可以接班的孩子
+  const dealCost = (s) => 20000000 * (s.second.stage + 1);
+  const brandFee = (s) => AW.clamp(Math.round(s.second.subs * 2 / 10000) * 10000, 300000, 8000000);
+  const platformFee = (s) => AW.clamp(Math.round(s.second.subs * 5 / 10000) * 10000, 2000000, 20000000);
+  const heirKid = (s) => s.kids.find((k) => AW.Family.age(s, k) >= 22);
   // 朋友的婚禮：今年結婚的朋友（每位朋友一次）
   const weddingFriend = (s) => {
     if (s.yearFlags.wedFriend !== undefined) return s.yearFlags.wedFriend;
@@ -38,6 +46,17 @@
   const wangBet = (s) => s.yearFlags.wangBet
     || (s.yearFlags.wangBet = AW.clamp(Math.round(Math.max(0, s.stats.money) * 0.1 / 10000) * 10000, 10000, 3000000));
   // 胡投顧的明牌：投入現金的兩成（最多 1000 萬）
+  // 目前的年級，例：國小四年級、國中二年級
+  const gradeName = (s) => s.age <= 11 ? `國小${'一二三四五六'[AW.clamp(s.age - 6, 0, 5)]}年級`
+    : s.age <= 14 ? `國中${'一二三'[s.age - 12]}年級` : s.age <= 17 ? `高中${'一二三'[s.age - 15]}年級` : '重考班';
+  // 開黑之夜：依年紀描述每位朋友在做什麼（只列出已經認識的朋友）
+  const squadLines = (s) => {
+    const tier = s.age < 18 ? 'teen' : s.age >= 65 ? 'old' : 'adult';
+    const list = AW.NPC.gamers(s).map((id) => AW.tx('npc.' + id, 'squad_' + tier, s)).join('、');
+    return AW.NPC.met(s, 'hu') ? list + '——' + AW.tx('npc.hu', 'squad_' + tier, s) : list + '。';
+  };
+  // 狗狗陪伴的年數
+  const DOG_YEARS = 14;
   const tipAmount = (s) => Math.min(10000000, Math.round(Math.max(0, s.stats.money) * 0.2 / 10000) * 10000);
 
   AW.EVENTS = [
@@ -108,7 +127,7 @@
         { effects: { best: 2, social: -2 } },
       ] },
     { id: 'pro_tv', phase: 'student', once: true,
-      cond: (s) => s.age >= 8 && s.age <= 14, weight: 15,
+      cond: (s) => s.age >= 8 && s.age <= 14 && !s.flags.scouted, weight: 15,
       choices: [
         { effects: { best: 3, mood: 8 }, flags: { dream: 1 } },
         { effects: { study: 3 } },
@@ -151,7 +170,7 @@
     { id: 'cousin', phase: 'student', once: true, cond: (s) => s.age >= 4 && s.age <= 10, weight: 10,
       effects: { fps: 3, dota: 3, reflex: 2 } },
     { id: 'legend', phase: 'student', once: true,
-      cond: (s) => s.age >= 10 && bestOf(s) >= 45, weight: 10,
+      cond: (s) => s.age >= 10 && s.age <= 17 && bestOf(s) >= 45, weight: 10, vars: (s) => ({ 年級: gradeName(s) }),
       effects: { social: 5, fame: 5, mood: 6 } },
     { id: 'wallet', phase: 'student', cond: (s) => s.age >= 6, weight: 3,
       choices: [
@@ -161,6 +180,7 @@
     { id: 'flu', phase: 'any', weight: 3,
       effects: { health: -12, mood: -4 } },
     { id: 'cat', phase: 'student', once: true, cond: (s) => s.age >= 4 && s.age <= 13, weight: 8,
+      variant: (s) => (s.seen.first_pc ? 'pc' : 'nopc'),
       effects: { mood: 10, health: 2 } },
     { id: 'mock_exam', phase: 'student', cond: (s) => s.age >= 16 && s.age <= 17, weight: 12,
       variant: (s) => (s.stats.study >= 55 ? 'high' : 'low'),
@@ -169,7 +189,7 @@
         { effects: { mood: 3 } },
       ] },
     { id: 'scout', phase: 'student', once: true,
-      cond: (s) => s.age >= 15 && bestOf(s) >= 55, weight: 12,
+      cond: (s) => s.age >= 15 && s.age <= 17 && bestOf(s) >= 55, weight: 12,
       effects: { fame: 5, mood: 8 }, flags: { scouted: 1 } },
     { id: 'netcafe_raid', phase: 'student', cond: (s) => s.age >= 12 && s.age <= 17, weight: 3,
       choices: [
@@ -181,6 +201,140 @@
     { id: 'game_dev_dream', phase: 'student', once: true,
       cond: (s) => s.age >= 11 && s.stats.study >= 35, weight: 6,
       effects: { study: 4, best: 1 }, flags: { coder: 1 } },
+
+    // ======================= 學生時期（v2.1 追加） =======================
+    // 抓周：1 歲一定會發生
+    { id: 'zhuazhou', phase: 'student', once: true, force: true, cond: (s) => s.age === 1,
+      choices: [
+        { effects: { fps: 3, dota: 3, reflex: 2, mood: 3 } },
+        { effects: { study: 5, mood: 2 } },
+        { effects: { social: 4, fame: 1, mood: 2 } },
+        { effects: { money: 3000, mood: 3 } },
+        { effects: { health: 5, reflex: 2 } },
+        { effects: { reflex: 3, mood: 5, health: -1 } },
+      ] },
+    // 嬰幼兒
+    { id: 'first_steps', phase: 'student', once: true, weight: 20, cond: (s) => s.age >= 1 && s.age <= 2,
+      choices: [
+        { effects: { health: 3, mood: 3 } },
+        { effects: { reflex: 2, fps: 1, dota: 1, mood: 2 } },
+      ] },
+    { id: 'vaccine', phase: 'student', weight: 5, cond: (s) => s.age >= 1 && s.age <= 5,
+      choices: [
+        { effects: { social: 2, mood: -1 } },
+        { effects: { mood: -3 } },
+      ] },
+    { id: 'dad_save', phase: 'student', once: true, weight: 8, cond: (s) => s.age >= 2 && s.age <= 5,
+      effects: { reflex: 2, mood: 5 } },
+    { id: 'kindergarten', phase: 'student', once: true, weight: 20, cond: (s) => s.age >= 3 && s.age <= 4,
+      choices: [
+        { effects: { mood: -3, social: 1 } },
+        { effects: { social: 5, mood: 3 } },
+        { effects: { study: 4 } },
+      ] },
+    { id: 'hide_seek', phase: 'student', weight: 5, cond: (s) => s.age >= 3 && s.age <= 6,
+      effects: { mood: 6, health: 2 } },
+    { id: 'claw_machine', phase: 'student', weight: 5, cond: (s) => s.age >= 3 && s.age <= 7,
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.reflex / 40, 0.15, 0.8),
+          success: { effects: { reflex: 2, mood: 8 } },
+          fail: { effects: { mood: -3 } } } },
+        { effects: { mood: 4, health: 1 } },
+      ] },
+    { id: 'talent_show', phase: 'student', once: true, weight: 8, cond: (s) => s.age >= 4 && s.age <= 6,
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.social / 40, 0.2, 0.85),
+          success: { effects: { social: 4, fame: 1, mood: 6 } },
+          fail: { effects: { mood: -4 } } } },
+        { effects: { reflex: 3, mood: 3 } },
+        { effects: { study: 1, mood: -1 } },
+      ] },
+    // 國小
+    { id: 'first_day', phase: 'student', once: true, weight: 30, cond: (s) => s.age === 6,
+      choices: [
+        { effects: { study: 4 } },
+        { effects: { social: 4, mood: 3 } },
+      ] },
+    { id: 'piano', phase: 'student', once: true, weight: 6, cond: (s) => s.age >= 6 && s.age <= 10,
+      choices: [
+        { effects: { reflex: 3, study: 1, mood: -4 } },
+        { roll: { chance: 0.5,
+          success: { effects: { mood: 5 } },
+          fail: { effects: { mood: -6, study: 1 } } } },
+      ] },
+    { id: 'school_trip', phase: 'student', weight: 5, cond: (s) => s.age >= 7 && s.age <= 11,
+      choices: [
+        { effects: { social: 4, mood: 6 } },
+        { effects: { best: 2, mood: 3, social: -1 } },
+      ] },
+    { id: 'summer_homework', phase: 'student', weight: 5, cond: (s) => s.age >= 7 && s.age <= 14,
+      choices: [
+        { effects: { study: 2, mood: -4, health: -2 } },
+        { effects: { study: 4, mood: -1 } },
+        { roll: { chance: 0.5,
+          success: { effects: { mood: 3 } },
+          fail: { effects: { mood: -6, social: -1 } } } },
+      ] },
+    { id: 'class_leader', phase: 'student', once: true, weight: 6, cond: (s) => s.age >= 8 && s.age <= 11,
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.social / 60, 0.15, 0.85),
+          success: { effects: { social: 5, study: 1, mood: 6 } },
+          fail: { effects: { mood: -4 } } } },
+        { effects: { social: 2 } },
+      ] },
+    { id: 'bully_help', phase: 'student', weight: 4, cond: (s) => s.age >= 8 && s.age <= 13,
+      choices: [
+        { roll: { chance: (s) => AW.clamp(0.3 + s.stats.social / 150, 0.3, 0.85),
+          success: { effects: { social: 6, mood: 5 } },
+          fail: { effects: { health: -5, mood: -3, social: 2 } } } },
+        { effects: { social: 2 } },
+      ] },
+    { id: 'science_fair', phase: 'student', once: true, weight: 6, cond: (s) => s.age >= 9 && s.age <= 11,
+      choices: [
+        { effects: { study: 3, reflex: 3, mood: 3 } },
+        { effects: { study: 3, mood: 2 } },
+      ] },
+    // 國中
+    { id: 'school_club', phase: 'student', once: true, weight: 15, cond: (s) => s.age >= 12 && s.age <= 13,
+      choices: [
+        { effects: { best: 3, social: 3 } },
+        { effects: { study: 3 }, flags: { coder: 1 } },
+        { effects: { social: 4, health: 3 } },
+      ] },
+    { id: 'voice_crack', phase: 'student', once: true, weight: 6, cond: (s) => s.age >= 12 && s.age <= 14,
+      choices: [
+        { effects: { social: 3, mood: 2 } },
+        { effects: { mood: -5 } },
+      ] },
+    { id: 'cram_school', phase: 'student', weight: 6, cond: (s) => s.age >= 12 && s.age <= 17,
+      choices: [
+        { effects: { study: 5, mood: -4 } },
+        { effects: { best: 3, mood: 3, study: -1 } },
+      ] },
+    { id: 'school_festival', phase: 'student', weight: 5, cond: (s) => s.age >= 12 && s.age <= 17,
+      choices: [
+        { effects: { fame: 2, social: 3, best: 1 } },
+        { effects: { money: 2000, study: 1 } },
+      ] },
+    { id: 'online_friend', phase: 'student', once: true, weight: 5, cond: (s) => s.age >= 13 && s.age <= 17,
+      choices: [
+        { roll: { chance: 0.6,
+          success: { effects: { social: 4, mood: 6 } },
+          fail: { effects: { mood: -6 } } } },
+        { effects: { study: 1 } },
+      ] },
+    // 高中
+    { id: 'part_time', phase: 'student', once: true, weight: 8, cond: (s) => s.age >= 16 && s.age <= 17,
+      choices: [
+        { effects: { money: 20000, health: -3, social: 3 } },
+        { effects: { money: 15000, best: 2 } },
+        { effects: { study: 3 } },
+      ] },
+    { id: 'grad_trip', phase: 'student', once: true, weight: 20, cond: (s) => s.age === 17,
+      choices: [
+        { effects: { mood: 10, social: 3 } },
+        { effects: { best: 3, mood: 2 } },
+      ] },
 
     // ======================= 電競職涯 =======================
     { id: 'fan_meet', phase: 'esports', cond: (s) => s.stats.fame >= 20, weight: 6,
@@ -338,7 +492,7 @@
         { effects: { study: 4, mood: 1 } },
         { effects: { money: 5000, mood: 3 } },
       ] },
-    { id: 'school_cup', phase: 'student', once: true, weight: 10, cond: (s) => s.age >= 15 && bestOf(s) >= 45,
+    { id: 'school_cup', phase: 'student', once: true, weight: 10, cond: (s) => s.age >= 15 && s.age <= 17 && bestOf(s) >= 45 && !s.seen.npc_wang_school,
       choices: [
         { roll: { chance: (s) => AW.clamp((bestOf(s) - 30) / 50, 0.1, 0.9),
           success: { effects: { fame: 8, money: 30000, mood: 10 }, flags: { scouted: 1 } },
@@ -459,9 +613,12 @@
       effects: () => ({ money: AW.randInt(1, 10) * 10000, mood: 6 }) },
     { id: 'stray_dog', phase: 'any', once: true, weight: 4, cond: (s) => s.age >= 6,
       choices: [
-        { effects: { mood: 10, health: 2 }, flags: { dog: 1 } },
+        { effects: { mood: 10, health: 2 }, flags: { dog: 1 }, run: (s) => { s.flags.dogAge = s.age; } },
         { effects: { mood: -2, social: 1 } },
       ] },
+    { id: 'dog_farewell', phase: 'any', once: true, force: true,
+      cond: (s) => s.flags.dog && s.flags.dogAge != null && s.age - s.flags.dogAge >= DOG_YEARS,
+      effects: { mood: -12 }, run: (s) => { s.flags.dog = 0; } },
     { id: 'thank_letter', phase: 'any', weight: 3, cond: (s) => s.stats.fame >= 25 || (s.eng && s.eng.rank >= 3),
       effects: { mood: 12, social: 1 } },
     { id: 'accident', phase: 'any', weight: 3, cond: (s) => s.age >= 16,
@@ -476,7 +633,7 @@
           fail: { effects: (s) => ({ money: -Math.round(s.stats.money * 0.1), mood: -12 }) } } },
         { effects: {} },
       ] },
-    { id: 'family_ill', phase: 'any', weight: 2, cond: (s) => s.age >= 12,
+    { id: 'family_ill', phase: 'any', weight: 2, cond: (s) => s.age >= 12 && s.age < 60,
       choices: [
         { effects: { mood: -4, social: 3 }, year: { busy: 1 } },
         { cond: (s) => s.age >= 18 && s.stats.money >= 200000, effects: { money: -200000, mood: -2 } },
@@ -586,7 +743,7 @@
       run: (s) => ({ text: AW.NPC.meet(s, AW.pick(AW.NPC.unmet(s, true))) }) },
     { id: 'npc_squad_night', phase: 'any', weight: 8,
       cond: (s) => s.age >= 14 && AW.NPC.gamers(s).filter((id) => bond(s, id) >= 50).length >= 4,
-      variant: (s) => (AW.NPC.met(s, 'hu') ? 'hu' : 'normal'),
+      vars: (s) => ({ 開黑名單: squadLines(s) }),
       effects: { mood: 15, best: 2, health: -3 },
       run: (s) => {
         if (AW.NPC.gamers(s).length >= 5) s.flags.squad6 = 1;
@@ -612,14 +769,14 @@
       effects: { mood: 6, social: 2, health: -2 }, bond: { hu: 5 } },
 
     // 哈基咩
-    { id: 'npc_haji_feed', phase: 'any', weight: 7, cond: (s) => s.age >= 10 && met('haji')(s),
+    { id: 'npc_haji_feed', phase: 'any', weight: 7, cond: (s) => s.age >= 10 && s.age < 45 && met('haji')(s),
       choices: [
         { effects: { mood: 6 }, bond: { haji: -1 } },
         { effects: { best: 2, mood: -2 }, bond: { haji: 6 } },
         { effects: { mood: 8, best: -1 }, bond: { haji: 4 } },
       ] },
     { id: 'npc_haji_mortgage', phase: 'any', once: true, weight: 6,
-      cond: (s) => s.age >= 26 && met('haji')(s) && bond(s, 'haji') >= 40 && s.stats.money >= 300000,
+      cond: (s) => s.age >= 26 && s.age < 48 && !s.seen.haji_mortgage_done && met('haji')(s) && bond(s, 'haji') >= 40 && s.stats.money >= 300000,
       choices: [
         { effects: { money: -300000, mood: 2 }, bond: { haji: 15 }, run: (s) => { s.npcs.haji.owe = 300000; s.npcs.haji.oweAt = s.age; s.npcs.haji.lent = 1; } },
         { bond: { haji: -8 } },
@@ -642,7 +799,7 @@
         { effects: { social: 2, money: -100 }, bond: { wang: 5 } },
       ] },
     { id: 'npc_wang_school', phase: 'student', once: true, weight: 9,
-      cond: (s) => s.age >= 15 && met('wang')(s) && bestOf(s) >= 40,
+      cond: (s) => s.age >= 15 && s.age <= 17 && met('wang')(s) && bestOf(s) >= 40,
       choices: [
         { roll: { chance: (s) => AW.clamp((bestOf(s) - 20) / 60, 0.15, 0.85),
           success: { effects: { fame: 6, best: 3, mood: 8 }, bond: { wang: 4 }, flags: { scouted: 1 } },
@@ -879,6 +1036,7 @@
         { effects: { mood: -4 } },
       ] },
     { id: 'kid_college', phase: 'any', once: true, weight: 15, cond: (s) => s.kids.some((k) => AW.Family.age(s, k) === 18),
+      variant: (s) => (AW.Love.active(s) ? 'couple' : 'single'),
       effects: { mood: 10, money: -200000 } },
     { id: 'kid_wedding', phase: 'any', weight: 25, cond: (s) => !!AW.Family.marriageable(s),
       vars: (s) => ({ 新人: (AW.Family.marriageable(s) || {}).name || '' }),
@@ -913,14 +1071,14 @@
       ] },
 
     // 實況主
-    { id: 'stream_flame', phase: 'second', weight: 6, cond: (s) => s.second.job === 'streamer' && s.age < 65,
+    { id: 'stream_flame', phase: 'second', weight: 6, cond: job('streamer'),
       choices: [
         { effects: { fame: -3, mood: -5 } },
         { roll: { chance: 0.4,
           success: { effects: { fame: 5, mood: 3 } },
           fail: { effects: { fame: -12, mood: -8 }, run: (s) => { s.second.subs = Math.round(s.second.subs * 0.85); } } } },
       ] },
-    { id: 'stream_donate', phase: 'second', weight: 5, cond: (s) => s.second.job === 'streamer' && s.age < 65,
+    { id: 'stream_donate', phase: 'second', weight: 5, cond: job('streamer'),
       income: 500000, effects: { mood: 8 } },
     // 12. 王選手開直播找你連線（實況主的話訂閱數也會增加）
     { id: 'stream_wang', phase: 'any', weight: 4, cond: (s) => s.age >= 30 && AW.NPC.met(s, 'wang') && AW.NPC.bond(s, 'wang') >= 30,
@@ -928,12 +1086,12 @@
       run: (s) => { if (s.phase === 'second' && s.second.job === 'streamer') s.second.subs = Math.round(s.second.subs * 1.05); } },
 
     // 教練
-    { id: 'coach_rookie', phase: 'second', weight: 6, cond: (s) => s.second.job === 'coach' && s.age < 65,
+    { id: 'coach_rookie', phase: 'second', weight: 6, cond: job('coach'),
       choices: [
-        { effects: { mood: -2, tactics: 2 }, run: (s) => { s.second.bonus += 4; } },
+        { effects: { mood: -2, tactics: 2 }, run: (s) => { s.second.bonus += 4; if (!s.second.rookie) s.second.rookie = s.age; } },
         { effects: { mood: 2 } },
       ] },
-    { id: 'coach_rival', phase: 'second', weight: 5, cond: (s) => s.second.job === 'coach' && s.age < 65 && !!s.rival,
+    { id: 'coach_rival', phase: 'second', weight: 5, cond: (s) => job('coach')(s) && !!s.rival,
       vars: (s) => AW.Esports.rivalVars(s),
       choices: [
         { effects: { fame: 4, mood: 3 }, bond: { wang: -3 } },
@@ -941,17 +1099,17 @@
       ] },
 
     // 創業從商、董事長
-    { id: 'biz_partner', phase: 'second', weight: 6, cond: (s) => s.second.job === 'biz' && s.age < 65 && !!s.second.partner,
+    { id: 'biz_partner', phase: 'second', weight: 6, cond: (s) => job('biz')(s) && !!s.second.partner,
       vars: (s) => ({ 合夥人: AW.NPC.name(s.second.partner) }),
       effects: { mood: 6, social: 2 }, year: { sp: 2 }, bond: (s) => ({ [s.second.partner]: 6 }) },
-    { id: 'biz_crisis', phase: 'second', weight: 5, cond: (s) => s.second.job === 'biz' && s.age < 65,
+    { id: 'biz_crisis', phase: 'second', weight: 5, cond: job('biz'),
       choices: [
         { effects: { mood: -4 }, year: { sp: -2 } },
         { roll: { chance: (s) => AW.clamp(s.stats.leader / 100, 0.2, 0.8),
           success: { effects: { fame: 3 }, year: { sp: 2 } },
           fail: { effects: { fame: -8, mood: -8 }, year: { sp: -4 } } } },
       ] },
-    { id: 'hostile_takeover', phase: 'second', weight: 5, cond: (s) => s.second.job === 'chairman' && s.age < 65,
+    { id: 'hostile_takeover', phase: 'second', weight: 5, cond: job('chairman'),
       choices: [
         { roll: { chance: (s) => AW.clamp(s.stats.leader / 110 + (AW.NPC.bond(s, 'hu') >= 60 ? 0.15 : 0), 0.2, 0.9),
           success: { effects: { fame: 5, mood: 8 }, year: { sp: 3 } },
@@ -960,6 +1118,226 @@
       ] },
     { id: 'own_team', phase: 'second', weight: 6, cond: (s) => s.flags.ownTeam,
       effects: { fame: 4, mood: 8 } },
+
+    // ======================= 第二幕：職業專屬事件（v2.1） =======================
+    // 董事長：併購案（隔年整合）
+    { id: 'ch_acquire', phase: 'second', weight: 8, cond: (s) => job('chairman')(s) && !s.second.deal,
+      vars: (s) => ({ 金額: AW.fmtMoney(dealCost(s)) }),
+      choices: [
+        { cond: (s) => s.stats.money >= dealCost(s), effects: (s) => ({ money: -dealCost(s), mood: 3 }), run: (s) => { s.second.deal = s.age; } },
+        { effects: { mood: -1 } },
+      ] },
+    { id: 'ch_acquire_done', phase: 'second', force: true, cond: (s) => job('chairman')(s) && s.second.deal && s.age > s.second.deal,
+      choices: [
+        { roll: { chance: (s) => AW.clamp((s.stats.leader + s.stats.tech) / 200 + 0.1, 0.3, 0.9),
+          success: { effects: (s) => ({ money: dealCost(s) * 2, fame: 5, mood: 10, health: -6 }), year: { sp: 4 }, run: (s) => { s.second.deal = 0; } },
+          fail: { effects: { fame: -4, mood: -10, health: -6 }, year: { sp: -3 }, run: (s) => { s.second.deal = 0; } } } },
+        { roll: { chance: (s) => AW.clamp((s.stats.leader + s.stats.tech) / 250, 0.2, 0.75),
+          success: { effects: (s) => ({ money: dealCost(s) * 2, mood: 8 }), year: { sp: 3 }, run: (s) => { s.second.deal = 0; } },
+          fail: { effects: { mood: -8 }, year: { sp: -2 }, run: (s) => { s.second.deal = 0; } } } },
+      ] },
+    { id: 'ch_scandal', phase: 'second', weight: 7, cond: job('chairman'),
+      choices: [
+        { effects: { fame: -3, mood: -4 }, year: { sp: -1 } },
+        { roll: { chance: 0.5,
+          success: { effects: { mood: 2 } },
+          fail: { effects: { fame: -12, mood: -10 }, run: (s) => { s.second.bad = (s.second.bad || 0) + 1; } } } },
+      ] },
+    { id: 'ch_successor', phase: 'second', once: true, weight: 13, cond: (s) => job('chairman')(s) && s.age >= 58,
+      vars: (s) => ({ 接班的孩子: (heirKid(s) || {}).name || '' }),
+      choices: [
+        { effects: { leader: 3, mood: 4 }, run: (s) => { s.second.heir = 1; } },
+        { cond: (s) => !!heirKid(s), hideLocked: true, effects: { mood: 10, love: 4 }, run: (s) => { s.second.heir = 1; } },
+        { effects: { mood: 3, health: -3 } },
+      ] },
+    { id: 'ch_keynote', phase: 'second', weight: 7, cond: job('chairman'),
+      choices: [
+        { roll: { chance: (s) => AW.clamp((s.stats.social + s.stats.fame) / 160, 0.25, 0.85),
+          success: { effects: { fame: 6, mood: 6 }, year: { sp: 2 } },
+          fail: { effects: { fame: -4, mood: -5 } } } },
+        { effects: { mood: 2 } },
+      ] },
+    { id: 'ch_hu_advice', phase: 'second', weight: 6, cond: (s) => job('chairman')(s) && met('hu')(s) && bond(s, 'hu') >= 40,
+      choices: [
+        { year: { sp: 2 }, bond: { hu: 5 } },
+        { effects: { leader: 1 }, bond: { hu: -2 } },
+      ] },
+    { id: 'ch_alma_mater', phase: 'second', once: true, weight: 5, cond: job('chairman'),
+      choices: [
+        { cond: (s) => s.stats.money >= 10000000, effects: { money: -10000000, fame: 5, mood: 8 },
+          run: (s) => { s.counters.donated = (s.counters.donated || 0) + 10000000; } },
+        { effects: { fame: 2, mood: 5 } },
+      ] },
+    { id: 'ch_antitrust', phase: 'second', weight: 6, cond: (s) => job('chairman')(s) && s.second.stage >= 2,
+      choices: [
+        { effects: { money: -30000000, mood: -3 }, year: { sp: -1 } },
+        { roll: { chance: (s) => AW.clamp(s.stats.leader / 110, 0.2, 0.8),
+          success: { effects: { fame: 3, mood: 5 } },
+          fail: { effects: { money: -100000000, fame: -8, mood: -10 } } } },
+      ] },
+    { id: 'ch_poach', phase: 'second', weight: 6, cond: job('chairman'),
+      vars: (s) => ({ 金額: AW.fmtMoney(5000000 * (s.second.stage + 1)) }),
+      choices: [
+        { cond: (s) => s.stats.money >= 5000000 * (s.second.stage + 1), effects: (s) => ({ money: -5000000 * (s.second.stage + 1) }), year: { sp: 1 } },
+        { effects: { leader: 3, mood: -2 }, year: { sp: -2 } },
+      ] },
+
+    // 企業家：創投入股（隔年要求擴張）
+    { id: 'biz_location', phase: 'second', weight: 7, cond: job('biz'),
+      choices: [
+        { cond: (s) => s.stats.money >= 2000000, effects: { money: -2000000 }, year: { sp: 3 } },
+        { year: { sp: 1 } },
+      ] },
+    { id: 'biz_influencer', phase: 'second', weight: 7, cond: job('biz'),
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.social / 100 + 0.1, 0.25, 0.85),
+          success: { effects: { fame: 4, mood: 5 }, year: { sp: 2 } },
+          fail: { effects: { fame: -4, mood: -5 }, year: { sp: -2 } } } },
+        { effects: { mood: 2 } },
+      ] },
+    { id: 'biz_copycat', phase: 'second', weight: 6, cond: job('biz'),
+      choices: [
+        { cond: (s) => s.stats.money >= 1000000, effects: { money: -1000000, mood: -3 }, year: { sp: 1 } },
+        { roll: { chance: (s) => AW.clamp(s.stats[AW.Second.THEMES[s.second.theme].stat] / 100, 0.2, 0.85),
+          success: { effects: { fame: 2, mood: 6 }, year: { sp: 3 } },
+          fail: { effects: { mood: -4 }, year: { sp: -1 } } } },
+        { effects: { mood: 2 }, year: { sp: -1 } },
+      ] },
+    { id: 'biz_manager', phase: 'second', weight: 6, cond: (s) => job('biz')(s) && s.age - s.second.since >= 1,
+      choices: [
+        { cond: (s) => s.stats.money >= 500000, effects: { money: -500000 }, year: { sp: 1 } },
+        { effects: { health: -6, leader: 3 } },
+      ] },
+    { id: 'biz_vc', phase: 'second', weight: 6, cond: (s) => job('biz')(s) && s.second.stage >= 1 && !s.second.vc,
+      choices: [
+        { effects: { mood: 5 }, run: (s) => { s.second.vc = s.age; s.second.runway += 2; } },
+        { effects: { leader: 2 }, run: (s) => { s.second.vc = -1; } },
+      ] },
+    { id: 'biz_vc_push', phase: 'second', force: true, cond: (s) => job('biz')(s) && s.second.vc > 0 && s.age > s.second.vc,
+      choices: [
+        { effects: { health: -8, mood: -5 }, year: { sp: 3 }, run: (s) => { s.second.vc = -1; } },
+        { effects: { mood: 2 }, year: { sp: -2 }, run: (s) => { s.second.vc = -1; s.second.runway -= 1; } },
+      ] },
+    { id: 'biz_regular', phase: 'second', weight: 5, cond: (s) => job('biz')(s) && s.age - s.second.since >= 2,
+      effects: { mood: 8, social: 2 } },
+    { id: 'biz_friends', phase: 'second', weight: 6, cond: (s) => job('biz')(s) && AW.NPC.gamers(s).length > 0,
+      effects: { mood: 6 }, year: { sp: 1 },
+      run: (s) => ({ bonds: AW.NPC.squadMembers(s).map((id) => ({ id, v: AW.NPC.addBond(s, id, 3) })).filter((x) => x.v) }) },
+    { id: 'biz_franchise', phase: 'second', weight: 6, cond: (s) => job('biz')(s) && s.second.stage >= 2,
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.leader / 100, 0.25, 0.85),
+          success: { effects: { money: 3000000, mood: 6 }, year: { sp: 3 } },
+          fail: { effects: { fame: -6, mood: -6 }, year: { sp: -2 } } } },
+        { effects: { fame: 2 } },
+      ] },
+
+    // 實況主
+    { id: 'stream_viral', phase: 'second', weight: 7, cond: job('streamer'),
+      effects: { fame: 3, mood: 6 }, run: (s) => { s.second.subs = Math.round(s.second.subs * 1.08); } },
+    { id: 'stream_brand', phase: 'second', weight: 7, cond: job('streamer'),
+      vars: (s) => ({ 金額: AW.fmtMoney(brandFee(s)) }),
+      choices: [
+        { income: (s) => brandFee(s), effects: { fame: -1, mood: -1 } },
+        { effects: { fame: 2, mood: 2 } },
+      ] },
+    { id: 'stream_burnout', phase: 'second', weight: 6, cond: job('streamer'),
+      choices: [
+        { effects: { mood: 10, health: 6 }, run: (s) => { s.second.subs = Math.round(s.second.subs * 0.94); } },
+        { effects: { mood: -8, health: -5 } },
+      ] },
+    { id: 'stream_troll', phase: 'second', weight: 6, cond: job('streamer'),
+      choices: [
+        { roll: { chance: 0.6,
+          success: { effects: { mood: 6, fame: 2 } },
+          fail: { effects: { mood: -6, money: -300000 } } } },
+        { effects: { mood: -4 } },
+      ] },
+    { id: 'stream_platform', phase: 'second', weight: 5, cond: (s) => job('streamer')(s) && !s.second.moved,
+      vars: (s) => ({ 金額: AW.fmtMoney(platformFee(s)) }),
+      choices: [
+        { income: (s) => platformFee(s), effects: { mood: 4 }, run: (s) => { s.second.moved = 1; s.second.subs = Math.round(s.second.subs * 0.85); } },
+        { effects: { mood: 3 }, run: (s) => { s.second.moved = 1; s.second.subs = Math.round(s.second.subs * 1.03); } },
+      ] },
+    { id: 'stream_rookie', phase: 'second', weight: 6, cond: job('streamer'),
+      choices: [
+        { effects: { social: 3, mood: 4 }, run: (s) => { s.second.subs = Math.round(s.second.subs * 1.03); } },
+        { effects: { mood: -1 } },
+      ] },
+    { id: 'stream_cast', phase: 'second', weight: 6, cond: (s) => job('streamer')(s) && (!!s.esports || s.stats.fame >= 40),
+      effects: { fame: 5, mood: 6 }, run: (s) => { s.second.subs = Math.round(s.second.subs * 1.04); } },
+    { id: 'stream_charity', phase: 'second', weight: 5, cond: job('streamer'),
+      choices: [
+        { effects: { fame: 4, mood: 8 }, run: (s) => { s.second.subs = Math.round(s.second.subs * 1.02); } },
+        { effects: { mood: -1 } },
+      ] },
+
+    // 教練：天才新秀長大了（重點培養 2 年後）
+    { id: 'coach_rookie_star', phase: 'second', force: true,
+      cond: (s) => job('coach')(s) && s.second.rookie > 0 && s.age - s.second.rookie >= 2,
+      choices: [
+        { effects: { money: 3000000, mood: 4 }, run: (s) => { s.second.rookie = -1; s.second.bonus -= 3; } },
+        { cond: (s) => s.stats.money >= 1500000, effects: { money: -1500000, mood: 6 }, run: (s) => { s.second.rookie = -1; s.second.bonus += 4; } },
+      ] },
+    { id: 'coach_fixing', phase: 'second', weight: 5, cond: job('coach'),
+      choices: [
+        { effects: { fame: 2, mood: -3 }, run: (s) => { s.second.bonus -= 3; } },
+        { roll: { chance: 0.6,
+          success: { effects: { mood: 6 }, run: (s) => { s.second.bonus += 3; } },
+          fail: { effects: { fame: -10, mood: -10 } } } },
+      ] },
+    { id: 'coach_conflict', phase: 'second', weight: 6, cond: job('coach'),
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.social / 100 + 0.1, 0.25, 0.85),
+          success: { effects: { mood: 4 }, run: (s) => { s.second.bonus += 3; } },
+          fail: { effects: { mood: -4 }, run: (s) => { s.second.bonus -= 3; } } } },
+        { effects: { tactics: 2 }, run: (s) => { s.second.bonus -= 1; } },
+      ] },
+    { id: 'coach_patch', phase: 'second', weight: 7, cond: job('coach'),
+      choices: [
+        { effects: { tactics: 4, health: -3, mood: -2 } },
+        { roll: { chance: 0.4,
+          success: { effects: { mood: 6 }, run: (s) => { s.second.bonus += 3; } },
+          fail: { effects: { mood: -4 }, run: (s) => { s.second.bonus -= 4; } } } },
+      ] },
+    { id: 'coach_bootcamp', phase: 'second', weight: 6, cond: job('coach'),
+      vars: (s) => ({ 金額: AW.fmtMoney(1000000 * (s.second.tier + 1)) }),
+      choices: [
+        { cond: (s) => s.stats.money >= 1000000 * (s.second.tier + 1), effects: (s) => ({ money: -1000000 * (s.second.tier + 1), mood: 3 }),
+          run: (s) => { s.second.bonus += 4; } },
+        { effects: { mood: 1 } },
+      ] },
+    { id: 'coach_old_mate', phase: 'second', once: true, weight: 5, cond: (s) => job('coach')(s) && !!s.esports,
+      choices: [
+        { effects: { tactics: 3, mood: 6 } },
+        { effects: { mood: -1 } },
+      ] },
+    { id: 'coach_critic', phase: 'second', weight: 6, cond: job('coach'),
+      choices: [
+        { effects: { fame: 2, mood: 2 } },
+        { effects: { tactics: 2, mood: -2 } },
+      ] },
+    { id: 'coach_analyst', phase: 'second', weight: 5, cond: job('coach'),
+      choices: [
+        { cond: (s) => s.stats.money >= 2000000, effects: { money: -2000000, tactics: 4 } },
+        { effects: { mood: 2 } },
+      ] },
+
+    // 退休（65 歲前）
+    { id: 'retire_bored', phase: 'second', weight: 8, cond: (s) => s.second.job === 'retired' && s.age < 65,
+      choices: [
+        { effects: { study: 5, mood: 5 } },
+        { effects: { social: 4, mood: 6, fame: 1 } },
+        { effects: { best: 3, mood: 4, health: -2 } },
+      ] },
+    { id: 'retire_reunion', phase: 'second', weight: 5, cond: (s) => s.second.job === 'retired' && s.age >= 45 && s.age < 65,
+      effects: { mood: 8, social: 2 } },
+    { id: 'retire_recognized', phase: 'second', weight: 5, cond: (s) => s.second.job === 'retired' && s.age < 65 && s.stats.fame >= 30,
+      effects: { mood: 6 } },
+    { id: 'retire_offer', phase: 'second', weight: 5, cond: (s) => s.second.job === 'retired' && s.age < 60,
+      choices: [
+        { run: (s) => { s.decision = AW.Second.decision(s, 'switch'); } },
+        { effects: { mood: 2 } },
+      ] },
 
     // ======================= 晚年（v2.0） =======================
     { id: 'old_friend_visit', phase: 'second', weight: 6, cond: (s) => s.age >= 55 && AW.NPC.metList(s).length > 0,
@@ -978,11 +1356,13 @@
       effects: { mood: 12, best: 1 } },
     { id: 'charity_thanks', phase: 'second', weight: 4, cond: (s) => (s.counters.donated || 0) >= 10000000,
       effects: { mood: 10, fame: 2 } },
+    // 結果文字：有認識哈基咩才會噴他（result_haji），否則用 result_normal
     { id: 'wish_reunion', phase: 'second', weight: 30,
       cond: (s) => AW.Second.hasWish(s, 'reunion') && AW.NPC.gamers(s).filter((id) => AW.NPC.bond(s, id) >= 40).length >= 4,
       effects: { mood: 15 }, run: (s) => {
         AW.Second.completeWish(s, 'reunion');
-        return { bonds: AW.NPC.squadMembers(s).map((id) => ({ id, v: AW.NPC.addBond(s, id, 5) })).filter((x) => x.v) };
+        return { text: AW.tx('event.wish_reunion', met('haji')(s) ? 'result_haji' : 'result_normal', s),
+          bonds: AW.NPC.squadMembers(s).map((id) => ({ id, v: AW.NPC.addBond(s, id, 5) })).filter((x) => x.v) };
       } },
     { id: 'wish_wang', phase: 'second', weight: 30, cond: (s) => AW.Second.hasWish(s, 'rival_match'),
       choices: [

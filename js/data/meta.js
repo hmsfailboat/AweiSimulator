@@ -24,7 +24,8 @@
     // 第二幕的章節（v2.0）
     champ_coach: { good: true },
     mega_streamer: { good: true },
-    tycoon: { good: true },
+    // 創業從商：掛牌上市（敲鐘）；董事長：科技帝國
+    tycoon: { good: true, variant: (s) => (s.second && s.second.job === 'chairman' ? 'empire' : 'ipo') },
     // 人生終章（v2.0）
     peaceful: { life: true, variant: alive },
     family: { life: true, good: true, variant: alive },
@@ -92,6 +93,8 @@
     { id: 'wishes_all', check: (s) => s.flags.allWishes },
     { id: 'centenarian', check: (s) => s.ending && s.ending.id === 'centenarian' },
     { id: 'life_winner', check: (s) => s.ending && s.ending.id === 'legend' },
+    // v2.1
+    { id: 'centi_billionaire', check: (s) => s.fin && AW.Finance.netWorth(s) >= 10000000000 },
     { id: 'all_endings' },
   ];
 

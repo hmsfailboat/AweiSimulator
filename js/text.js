@@ -34,6 +34,8 @@
       if (s.esports) Object.assign(v, { 戰隊: s.esports.team, 國內冠軍: s.esports.domesticTitles, 世界冠軍: s.esports.worldTitles });
       if (s.eng) Object.assign(v, { 公司: s.eng.stage === 'startup' ? s.eng.startupName : s.eng.companyName,
         職級: AW.Engineer ? AW.Engineer.rankName(s) : '' });
+      // 第二幕：企業家、董事長的公司
+      if (s.phase === 'second' && s.second && s.second.name) v.公司 = s.second.name;
       return v;
     },
 

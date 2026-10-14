@@ -216,7 +216,7 @@
       effects: { fame: 10, mood: 15 }, run(s) { s.flags.ownTeam = 1; return { text: AW.tx('action.ch_team', 'msg', s) }; } },
 
     // ---------------- 退休、晚年（v2.0） ----------------
-    { id: 'switch_job', stages: SECOND, cond: (s) => s.age < AW.Second.ELDER_AGE,
+    { id: 'switch_job', stages: SECOND, cond: (s) => s.age < AW.Second.ELDER_AGE || AW.Second.working(s),
       run: (s) => AW.Second.switchJob(s) },
     { id: 'travel', stages: OLD, cost: 500000, effects: { mood: 14, health: 2 },
       run(s) { if (s.age >= 60) s.counters.travelOld = (s.counters.travelOld || 0) + 1; return { text: '' }; } },
@@ -237,7 +237,8 @@
     { id: 'walk', stages: OLD, effects: { health: 7, mood: 3 } },
     { id: 'memoir', stages: OLD, effects: { mood: 6, study: 2 },
       run(s) { s.counters.memoir = (s.counters.memoir || 0) + 1; return { text: '' }; } },
-    { id: 'checkup', stages: OLD, cost: 200000, effects: { health: 8 },
+    { id: 'checkup', stages: OLD.concat(JOBS2), cost: 200000, effects: { health: 8 }, hideLocked: true,
+      cond: (s) => s.age >= 50 || !AW.Second.working(s),
       run(s) { s.yearFlags.checkup = 1; return { text: AW.tx('action.checkup', 'msg', s) }; } },
 
     // ---------------- 創業 ----------------

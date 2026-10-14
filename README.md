@@ -29,6 +29,7 @@
 | `js/ui.js` | 畫面 |
 | `tools/sim.js` | 平衡模擬：`node tools/sim.js 1000`；`node tools/sim.js --meta` 統計幾局能全部解鎖傳承商店 |
 | `docs/PLAN.md` / `docs/PLAN-v2.md` | 實作企劃（v1.0／v1.2 之後） |
+| `docs/ENDINGS.md` | **結局與成就一覽**：達成條件、傳承點（`tools/sim.js` 會檢查有沒有漏列） |
 
 ## 修改遊戲文字
 所有事件、選項、成就等文字都集中在 [`js/data/texts.js`](js/data/texts.js)，用簡單的「欄位 = 內容」格式撰寫，改完存檔、重新整理網頁就會生效。檔案開頭有完整的格式說明。
