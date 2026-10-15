@@ -36,6 +36,16 @@
           if (btn) btn.disabled = !v;
         }
       });
+      doc.addEventListener('change', (ev) => {
+        if (ev.target.id !== 'save-file' || !ev.target.files || !ev.target.files[0]) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          this.handlers['import-file'].call(this, String(reader.result || ''));
+        };
+        reader.onerror = () => this.toast('⚠️ 無法讀取這個檔案。', 'bad');
+        reader.readAsText(ev.target.files[0]);
+        ev.target.value = ''; // 讓同一個檔案可以再選一次
+      });
       doc.addEventListener('keydown', (ev) => {
         if (ev.key === 'Enter' && ev.target.id === 'pro-name') this.handlers['confirm-name'].call(this);
         if (ev.key === 'Escape') this.closeModal();
@@ -141,10 +151,28 @@
           <button class="btn ${has ? '' : 'primary'} big" data-act="new">👶 開始新人生</button>
           <button class="btn big" data-act="shop">🏛️ 傳承商店 <span class="pill">🧬 ${m.legacy}</span></button>
           <button class="btn big" data-act="gallery">📖 結局與成就 <span class="pill">${endingsGot}/${Object.keys(AW.ENDINGS).length}</span></button>
+          <button class="btn ghost" data-act="transfer">💾 匯出／匯入存檔（換裝置）</button>
           <button class="btn ghost" data-act="help">❓ 遊戲說明</button>
         </div>
         <p class="foot">已重生 ${m.runs} 次 · 致敬遊戲天才阿維 · v${AW.VERSION}</p>
       </div>`;
+    },
+
+    // 存檔檔案：遊戲中只能匯出，標題畫面才能匯入
+    rTransfer(inGame) {
+      const exp = `<section class="transfer-sec">
+          <h4>📤 匯出 <small class="muted">在舊裝置上下載存檔檔案</small></h4>
+          <div class="row"><button class="btn primary sm" data-act="export-save">⬇️ 下載存檔檔案</button></div>
+        </section>`;
+      const imp = inGame ? '<p class="muted small">要匯入存檔，請先回到標題畫面。</p>' : `<section class="transfer-sec">
+          <h4>📥 匯入 <small class="muted">在新裝置上選擇存檔檔案</small></h4>
+          <div class="row"><label class="btn sm">📂 選擇存檔檔案<input type="file" id="save-file" accept=".txt,text/plain" hidden></label></div>
+          <p class="muted small">匯入會覆蓋這台裝置上的傳承點、天賦、成就，以及進行中的人生。</p>
+        </section>`;
+      return `<h3>💾 匯出／匯入存檔</h3>
+        <p class="muted small">存檔檔案包含跨局進度（傳承點、天賦、升級、成就、結局）和進行中的人生，可以用來換裝置或備份。</p>
+        ${exp}${imp}
+        <div class="row end"><button class="btn ghost" data-act="close-modal">關閉</button></div>`;
     },
 
     // ======================= 出生設定 =======================
@@ -1127,7 +1155,7 @@
             <li>👨‍👩‍👧 <b>家庭</b>：結婚後可能有孩子，常陪孩子打電動，他們長大也許會成為職業選手。人緣很高時可能同時交往……小心修羅場。</li>
             <li>🧬 每局結束獲得傳承點，可購買永久升級與天賦。結婚、累積財富也能多拿傳承點。</li>
           </ul>
-          <p class="muted small">進度每年自動存檔在瀏覽器中。</p>
+          <p class="muted small">進度每年自動存檔在瀏覽器中。要換裝置或備份，請用標題畫面的「💾 匯出／匯入存檔」。</p>
           <div class="row end"><button class="btn primary" data-act="close-modal">了解！</button></div>`);
       },
       'close-modal'() { this.closeModal(); },
@@ -1206,9 +1234,51 @@
       menu() {
         this.modal(`<h3>☰ 選單</h3><div class="menu-col">
           <button class="btn" data-act="help">❓ 遊戲說明</button>
+          <button class="btn" data-act="transfer">💾 匯出存檔</button>
           <button class="btn" data-act="to-title">🏠 回到標題（進度已自動存檔）</button>
           <button class="btn danger" data-act="abandon">🗑️ 放棄這一局</button>
           <button class="btn ghost" data-act="close-modal">關閉</button></div>`);
+      },
+
+      // 存檔檔案
+      transfer() { this.modal(this.rTransfer(this.screen === 'game'), 'wide'); },
+      async 'export-save'() {
+        if (this.S) AW.Save.save(this.S);
+        let code;
+        try { code = await AW.Save.exportCode(); } catch (e) { return this.toast('⚠️ 匯出失敗：這個瀏覽器無法讀取存檔。', 'bad'); }
+        const d = new Date();
+        const p2 = (n) => String(n).padStart(2, '0');
+        const a = doc.createElement('a');
+        a.href = URL.createObjectURL(new Blob([code], { type: 'text/plain' }));
+        a.download = `awei-save-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}.txt`;
+        doc.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        this.toast('💾 已下載存檔檔案，把它傳到新裝置後用「匯入」讀取。');
+      },
+      // 由檔案選擇器讀進檔案內容後呼叫
+      async 'import-file'(text) {
+        let data;
+        try { data = await AW.Save.parseCode(text); } catch (e) { return this.toast(`⚠️ ${esc(e.message)}`, 'bad'); }
+        this.pendingCode = text;
+        const sv = data.save;
+        const life = sv ? `進行中的人生：${esc(sv.displayName || '劉家維')}，${sv.age} 歲` : '沒有進行中的人生';
+        this.modal(`<h3>📥 確定要匯入嗎？</h3>
+          <p>存檔內容：</p>
+          <ul><li>🧬 傳承點 ${data.meta.legacy}</li><li>🔁 已重生 ${data.meta.runs || 0} 次</li>
+          <li>📖 已達成結局 ${Object.keys(data.meta.endings || {}).length} 個</li><li>${life}</li></ul>
+          <p class="muted">這台裝置上現有的進度會被覆蓋，無法復原。</p>
+          <div class="row end"><button class="btn ghost" data-act="transfer">返回</button>
+          <button class="btn danger" data-act="import-confirm">覆蓋並匯入</button></div>`);
+      },
+      async 'import-confirm'() {
+        try { await AW.Save.importCode(this.pendingCode); } catch (e) { return this.toast(`⚠️ ${esc(e.message)}`, 'bad'); }
+        this.pendingCode = null;
+        this.S = null;
+        this.closeModal();
+        this.go('title');
+        this.toast('✅ 匯入完成！歡迎回來。');
       },
       abandon() { this.confirm('確定要放棄這一局嗎？這一局不會獲得傳承點。', 'abandon-confirm', '放棄'); },
       'abandon-confirm'() { AW.Save.clear(); this.S = null; this.closeModal(); this.go('title'); },

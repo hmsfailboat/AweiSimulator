@@ -66,7 +66,7 @@
     { id: 'rival_friends', check: (s) => s.rival && s.rival.w + s.rival.l >= 15 },
     { id: 'office_top', check: (s) => (s.counters.officeTop || 0) >= 3 },
     { id: 'weiya', check: (s) => s.flags.weiya },
-    { id: 'house', check: (s) => s.items && s.items.house },
+    { id: 'house', check: (s) => s.items && (s.items.house || s.items.mansion) },
     { id: 'chef', check: (s) => s.staff && s.staff.chef },
     { id: 'guard', check: (s) => s.staff && s.staff.guard },
     { id: 'taxpayer', check: (s) => s.fin && s.fin.taxTotal >= 10000000 },

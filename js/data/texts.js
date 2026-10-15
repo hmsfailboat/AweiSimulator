@@ -2408,7 +2408,7 @@ desc = 在尾牙抽中頭獎
 [achievement.house]
 icon = 🏡
 name = 有殼族
-desc = 買下自己的房子
+desc = 買下自己的房子（豪宅也算）
 
 [achievement.chef]
 icon = 🍳

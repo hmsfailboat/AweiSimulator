@@ -56,6 +56,11 @@
   });
 
   // ======================= 存讀檔 =======================
+  // 把位元組丟進壓縮／解壓縮串流，取回結果
+  const pipeBytes = async (bytes, stream) => {
+    const buf = await new root.Response(new root.Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer();
+    return new Uint8Array(buf);
+  };
   const Save = (AW.Save = {
     save(s) {
       s.rng = AW.rng.s;
@@ -78,6 +83,55 @@
     },
     clear() { try { storage && storage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } },
     has() { return !!this.load(); },
+
+    // ---------- 存檔檔案（跨裝置轉移） ----------
+    // AWEIZ1-：deflate 壓縮後 Base64（約原本 1/3 長）；AWEI1-：未壓縮（瀏覽器不支援壓縮時）
+    async exportCode() {
+      const read = (k) => { try { return storage ? storage.getItem(k) : null; } catch (e) { return null; } };
+      const meta = JSON.parse(read(META_KEY) || 'null') || Meta.get();
+      const save = JSON.parse(read(SAVE_KEY) || 'null');
+      let bytes = new TextEncoder().encode(JSON.stringify({ v: 1, meta, save: save && save.phase !== 'ended' ? save : null }));
+      let prefix = 'AWEI1-';
+      if (root.CompressionStream) {
+        bytes = await pipeBytes(bytes, new root.CompressionStream('deflate-raw'));
+        prefix = 'AWEIZ1-';
+      }
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      return prefix + btoa(bin);
+    },
+    // 解析存檔檔案內容；格式錯誤時丟出帶中文訊息的 Error
+    async parseCode(code) {
+      const raw = String(code || '').replace(/\s+/g, '');
+      if (!raw) throw new Error('這個檔案是空的。');
+      const zipped = raw.indexOf('AWEIZ1-') === 0;
+      if (!zipped && raw.indexOf('AWEI1-') !== 0) throw new Error('這不是阿維模擬器的存檔檔案。');
+      if (zipped && !root.DecompressionStream) throw new Error('這個瀏覽器版本太舊，無法讀取存檔檔案，請更新瀏覽器。');
+      let data;
+      try {
+        const bin = atob(raw.slice(raw.indexOf('-') + 1));
+        let bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        if (zipped) bytes = await pipeBytes(bytes, new root.DecompressionStream('deflate-raw'));
+        data = JSON.parse(new TextDecoder().decode(bytes));
+      } catch (e) { throw new Error('存檔檔案不完整或已損壞。'); }
+      if (!data || data.v !== 1 || !data.meta || typeof data.meta !== 'object' || typeof data.meta.legacy !== 'number')
+        throw new Error('存檔檔案內容有誤，無法讀取。');
+      if (data.save && (typeof data.save !== 'object' || data.save.version !== 1)) throw new Error('存檔檔案中的人生進度版本不相容。');
+      return data;
+    },
+    // 寫入存檔檔案內容（覆蓋本機的跨局進度與進行中的人生）
+    async importCode(code) {
+      const data = await this.parseCode(code);
+      if (!storage) throw new Error('這個瀏覽器無法存檔（可能是無痕模式）。');
+      try {
+        storage.setItem(META_KEY, JSON.stringify(data.meta));
+        if (data.save) storage.setItem(SAVE_KEY, JSON.stringify(data.save));
+        else storage.removeItem(SAVE_KEY);
+      } catch (e) { throw new Error('寫入失敗，瀏覽器的儲存空間可能已滿。'); }
+      Meta.load();
+      return data;
+    },
   });
 
   // ======================= 引擎 =======================

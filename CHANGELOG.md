@@ -11,6 +11,19 @@
 
 （尚無變更）
 
+## [2.2] - 2026-10-15
+
+可以匯出、匯入存檔，把進度帶到其他裝置或拿來備份。舊存檔可以直接接著玩。
+
+### 新增
+- **💾 匯出／匯入存檔**：可以把進度帶到其他裝置，也可以拿來備份。
+  - 標題畫面的「💾 匯出／匯入存檔」可以匯出也可以匯入，遊戲中的選單只能匯出。
+  - 匯出會下載一個存檔檔案（`awei-save-日期.txt`），包含跨局進度（傳承點、天賦、升級、成就、結局）和進行中的人生。把檔案傳到新裝置後，用「選擇存檔檔案」匯入。
+  - 存檔檔案經過壓縮，玩到晚年也只有十多 KB。匯入前會顯示內容摘要並要求確認，會覆蓋這台裝置上的進度。
+
+### 修正
+- 🏡 有殼族：買豪宅也算達成（原本只認一般房子）。
+
 ## [2.1] - 2026-10-15
 
 當上大老闆、拿下世界冠軍之後的人生更有內容：每份工作都有自己的事件，董事長和企業家每年都要做經營決策，工作期間不再快轉。童年多了抓周和 21 個學生時期事件，並修正了一批年齡、先後順序矛盾的事件。舊存檔可以直接接著玩。
@@ -279,7 +292,8 @@
 - 深色電競風介面，支援手機版面。
 - `tools/sim.js` 無頭平衡模擬工具。
 
-[未發布]: https://github.com/hmsfailboat/AweiSimulator/compare/v2.1...HEAD
+[未發布]: https://github.com/hmsfailboat/AweiSimulator/compare/v2.2...HEAD
+[2.2]: https://github.com/hmsfailboat/AweiSimulator/compare/v2.1...v2.2
 [2.1]: https://github.com/hmsfailboat/AweiSimulator/compare/v2.0.1...v2.1
 [2.0.1]: https://github.com/hmsfailboat/AweiSimulator/compare/v2.0...v2.0.1
 [2.0]: https://github.com/hmsfailboat/AweiSimulator/compare/v1.2...v2.0
