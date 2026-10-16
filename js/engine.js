@@ -200,6 +200,7 @@
       s.itemSince = s.itemSince || {};
       if (s.rival === undefined) s.rival = null;
       if (s.esports && !s.rival) AW.Esports.startRival(s);
+      AW.Esports.migrate(s);
       if (s.eng && s.eng.stage !== 'uni' && !s.eng.peers) AW.Office.makePeers(s);
       // v2.0：章節、第二幕、子女、多位交往對象、遺願清單
       if (s.stats.tactics == null) s.stats.tactics = 0;
@@ -210,6 +211,8 @@
       s.flings = s.flings || [];
       if (s.second === undefined) s.second = null;
       if (s.wishes === undefined) s.wishes = null;
+      // v2.3：保留的公司股份
+      s.holdings = s.holdings || [];
     },
 
     // ---------- 階段 ----------
@@ -253,6 +256,17 @@
       s.log.push({ age: s.age, icon, text });
       if (s.log.length > 300) s.log.shift();
     },
+    // 同一年同一個 key 的紀錄只留一筆（例如今年分好幾次投入同一檔投資）：update(entry) 更新累計值、icon、text
+    logOnce(s, key, update) {
+      let e = null;
+      for (let i = s.log.length - 1; i >= 0 && s.log[i].age === s.age; i--) if (s.log[i].key === key) { e = s.log[i]; break; }
+      if (!e) {
+        e = { age: s.age, key, icon: '', text: '' };
+        s.log.push(e);
+        if (s.log.length > 300) s.log.shift();
+      }
+      update(e);
+    },
     note(s, icon, text) {
       s.yearNotes.push({ icon, text });
       this.addLog(s, icon, text);
@@ -270,6 +284,7 @@
       s.yearStart = Object.assign({}, s.stats);
       AW.Finance.beginYear(s);
       if (s.phase === 'second') AW.Second.beginYear(s);
+      if (s.phase === 'esports') AW.Esports.rollMeta(s);
       s.pendingEvents = this.rollEvents(s);
       s.step = s.pendingEvents.length ? 'event' : 'action';
       this.checkAchievements(s);
@@ -278,11 +293,10 @@
 
     rollEvents(s) {
       const phase = s.phase === 'student' ? 'student' : s.phase;
-      const guard = s.staff && s.staff.guard;
       const pool = AW.EVENTS.filter((e) =>
         (e.phase === phase || e.phase === 'any' || (Array.isArray(e.phase) && e.phase.includes(phase))) &&
         !(e.once && s.seen[e.id]) &&
-        !(e.threat && guard) &&
+        !(e.threat && AW.NPC.guarded(s, e.threat)) &&
         (!e.cond || e.cond(s)));
       // force：連續事件的後續，條件成立就一定發生
       const out = pool.filter((e) => e.force).map((e) => e.id);
@@ -516,10 +530,12 @@
       const aging = this.AGING.find(([age]) => s.age >= age);
       // 運動系另一半會拉著你運動，年齡衰退 -1
       if (aging) AW.applyEffects(s, { health: -Math.max(0, aging[1] - AW.Love.healthCare(s)) });
-      if (s.flags.chronic) AW.applyEffects(s, { health: -4 });
+      // 阿方的健康餐：慢性病扣得比較少、要更多年才會得到
+      const meal = AW.NPC.mealPlan(s);
+      if (s.flags.chronic) AW.applyEffects(s, { health: -Math.round(4 * (meal ? meal.chronicDrain : 1)) });
       if (s.stats.health < 30) {
         s.counters.lowHealth = (s.counters.lowHealth || 0) + 1;
-        if (s.counters.lowHealth >= 3 && !s.flags.chronic) {
+        if (s.counters.lowHealth >= (meal ? meal.chronicYears : 3) && !s.flags.chronic) {
           s.flags.chronic = 1;
           this.note(s, '🩺', AW.tx('status', 'msg_chronic', s));
         }
@@ -623,9 +639,11 @@
       if (!d) return null;
       const opt = d.options[idx];
       if (!opt) return null;
-      const r = (opt.apply && opt.apply(s)) || {};
       s.decision = null;
+      // 選項可以接著產生下一個抉擇（例如換工作後決定公司股份怎麼處理）
+      const r = (opt.apply && opt.apply(s)) || {};
       if (r.text) this.note(s, d.icon || '📌', r.text);
+      if (s.decision) { Save.save(s); return r; }
       if (s.step === 'decision') {
         if (s.pendingEnding) return this.offerChapter(s, s.pendingEnding);
         this.beginYear(s);
@@ -757,6 +775,8 @@
     finish(s, endingId) {
       if (s.phase === 'ended') return s.ending;
       AW.Finance.liquidate(s);
+      // 保留的公司股份也換成現金（算進遺產）
+      while (s.holdings && s.holdings.length) AW.Second.sellHolding(s, 0);
       const life = this.lifeAvg(s);
       // 職涯普通，但一生快樂又成家 → 平凡但幸福（沒有繼續人生時）
       if (!s.chapters.length && this.PLAIN_ENDINGS.includes(endingId) && life.mood >= this.HAPPY_MOOD && s.love && s.love.status === 'married') endingId = 'happy_life';

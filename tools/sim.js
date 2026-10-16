@@ -53,7 +53,7 @@ function pickActions(s, prefs, grind) {
   const out = [];
   const st = s.stats;
   const need = [];
-  if (!grind && st.health < 45) need.push('rest', 'pro_rest', 'uni_rest', 'vacation', 'gym', 'sports', 'walk', 'checkup');
+  if (!grind && st.health < 45) need.push('rest', 'pro_rest', 'uni_rest', 'vacation', 'gym', 'fang_meal', 'sports', 'walk', 'checkup');
   if (!grind && st.mood < 50) need.push('rest', 'pro_rest', 'uni_game', 'vacation', 'friends', 'fishing', 'travel');
   if (AW.Love.active(s) && st.love < 70) need.push('date');
   for (const id of need.concat(prefs(s))) {
@@ -72,6 +72,14 @@ const STRATS = {
     trait: 'gamer', alloc: { fps: 5, reflex: 5 },
     student: (s) => s.age < 6 ? ['watch_dad', 'tablet', 'crawl']
       : (s.age % 3 === 0 ? ['reflex_train', 'play_fps'] : ['play_fps', 'ranked_night', 'reflex_train', 'sports']),
+    wantPro: true,
+  },
+  // 和 gamer 相同，但主攻 DOTA。「打 DOTA」9 歲才能選，18 歲時能力比 gamer 低一截，
+  // 要比較兩種遊戲的職涯，請用同一批角色只換主攻項目（CHANGELOG 有這樣比較的結果）
+  gamer_dota: {
+    trait: 'gamer', alloc: { dota: 5, reflex: 5 },
+    student: (s) => s.age < 6 ? ['watch_dad', 'tablet', 'crawl']
+      : (s.age % 3 === 0 ? ['reflex_train', 'play_dota'] : ['play_dota', 'ranked_night', 'reflex_train', 'sports']),
     wantPro: true,
   },
   scholar: {
@@ -111,12 +119,17 @@ function shopAll(s) {
     if (want != null && want > s.fin.style) F.setStyle(s, want);
     if (s.stats.money > 2000000) F.invest(s, 'etf', Math.round(s.stats.money * 0.5));
   }
+  // 雇用朋友：年薪的 10 倍存款才請（先請高階的）
+  for (const job of ['chef', 'guard', 'bento', 'bodyguard']) {
+    if (AW.NPC.hireState(s, job).ok && s.stats.money >= AW.STAFF[job].salary * 10) AW.NPC.hire(s, job);
+  }
 }
 
 const proPrefs = (s) => {
   const st = s.stats;
   const p = [];
   if (st[s.esports.game] < 92) p.push('solo_grind');
+  p.push(s.esports.game === 'fps' ? 'aim_train' : 'draft_study');
   if (st.teamwork < 75) p.push('scrim');
   if (st.reflex < 75) p.push('reflex_drill');
   if (s.age >= 26) p.unshift('gym');
@@ -148,6 +161,13 @@ const secondPrefs = (s) => {
 // 第二幕的抉擇：隨機選一個能選的（不選「維持現狀」）
 function pickDecision(s) {
   const d = s.decision;
+  // 公司股份：一半賣掉、一半保留
+  if (d.type === 'shares') {
+    s.simShares = (s.simShares || 0) + 1;
+    const keep = R() < 0.5;
+    if (keep) s.simKeep = (s.simKeep || 0) + 1;
+    return keep ? 1 : 0;
+  }
   if (d.type !== 'second') return 0;
   const ok = d.options.map((o, i) => ({ o, i })).filter((x) => !x.o.disabled && x.o.label !== AW.tx('second', 'opt_stay'));
   return ok.length ? ok[Math.floor(R() * ok.length)].i : 0;
@@ -216,19 +236,23 @@ function playRun(strat, opts) {
   res.stuck = s.phase !== 'ended' ? s.step : null;
   res.age = s.age;
   res.legacy = s.ending && s.ending.legacy;
-  if (s.esports) { res.tier = s.esports.maxTier; res.bestWorlds = s.esports.bestWorlds; res.dom = s.esports.domesticTitles; }
+  if (s.esports) { res.tier = s.esports.maxTier; res.bestWorlds = s.esports.bestWorlds; res.dom = s.esports.domesticTitles; res.game = s.esports.game; res.aces = s.esports.aces || 0; res.worldN = s.esports.worldTitles; res.retireAge = s.esports.history.length ? s.esports.history[s.esports.history.length - 1].age : null; }
+  res.ach = Object.keys(AW.ACHIEVEMENTS.reduce((o, a) => (a.check && a.check(s) ? Object.assign(o, { [a.id]: 1 }) : o), {}));
   if (s.eng) { res.rank = s.eng.bestRank; res.startup = s.eng.startup; res.bankrupt = s.flags.bankrupt || 0; }
   res.collapsed = s.flags.collapsed || 0;
   res.dated = s.flags.girlfriend ? 1 : 0;
   res.gh = s.ending && s.ending.grades && s.ending.grades.health;
   res.gm = s.ending && s.ending.grades && s.ending.grades.mood;
   res.chronic = s.flags.chronic ? 1 : 0;
+  res.meal = AW.NPC.mealPlan(s) ? 1 : 0;
   res.married = s.love && s.love.status === 'married' ? 1 : 0;
   res.brokeUp = s.flags.brokeUp ? 1 : 0;
   res.money = s.stats.money;
   res.tax = s.fin.taxTotal;
   res.debt = s.flags.debt ? 1 : 0;
   res.npcs = Object.keys(s.npcs).length;
+  res.shares = s.simShares || 0;
+  res.holdings = s.simKeep || 0;
   if (s.rival) res.h2h = s.rival.w + s.rival.l;
   return res;
 }
@@ -309,6 +333,10 @@ for (const strat of Object.keys(STRATS)) {
     console.log(`18歲 主遊戲 ${avg(runs, 'best18')} 反應 ${avg(runs, 'reflex18')} 學力 ${avg(runs, 'study18')}`);
     console.log(`職業門檻 ${pct(by((r) => r.proOk), N)}  升學門檻 ${pct(by((r) => r.studyOk), N)}  雙失敗 ${pct(by((r) => !r.proOk && !r.studyOk), N)}`);
     console.log(`路線：電競 ${pct(es.length, N)} 工程師 ${pct(en.length, N)} 平凡 ${pct(by((r) => r.path === 'ordinary'), N)}`);
+    for (const g of ['fps', 'dota']) {
+      const eg = es.filter((r) => r.game === g);
+      if (eg.length) console.log(`  ${g.toUpperCase()} ${eg.length} 人：世界冠軍 ${pct(eg.filter((r) => r.worldN > 0).length, eg.length)}  平均世界冠軍 ${avg(eg, 'worldN')} 座  退役年齡 ${avg(eg, 'retireAge')}  ACE ${avg(eg, 'aces')}  ACE之王 ${pct(eg.filter((r) => r.ach.includes('ace_king')).length, eg.length)}  大器晚成 ${pct(eg.filter((r) => r.ach.includes('late_bloomer')).length, eg.length)}`);
+    }
     if (es.length) console.log(`  電競：世界冠軍 ${pct(es.filter((r) => r.hit.includes('world_champ')).length, es.length)}  曾進世界賽 ${pct(es.filter((r) => r.bestWorlds > 0).length, es.length)}  國內冠軍 ${pct(es.filter((r) => r.dom > 0).length, es.length)}  最高Tier ${avg(es, 'tier')}  結束年齡 ${avg(es, 'age')}`);
     if (en.length) {
       const g = {};
@@ -338,6 +366,8 @@ for (const strat of Object.keys(STRATS)) {
       console.log(`  人生：章節平均 ${avg(runs, 'nChapters')} 個｜冠軍教練 ${hitPct('champ_coach')} 百萬訂閱 ${hitPct('mega_streamer')} 商業大亨 ${hitPct('tycoon')}｜回合數平均 ${avg(runs, 'turns')}`);
       console.log(`  過世 ${pct(dead.length, N)}，年齡中位數 ${dead.length ? dead[Math.floor(dead.length / 2)] : '-'}（25% ${dead[Math.floor(dead.length * 0.25)] || '-'}、75% ${dead[Math.floor(dead.length * 0.75)] || '-'}）｜子女平均 ${avg(runs, 'kids')}｜遺願完成平均 ${avg(runs, 'wishes')}`);
       console.log(`  第二幕職業 ${JSON.stringify(jobs)}｜人生終章 ${JSON.stringify(lifeEnd)}`);
+      console.log(`  結局時有阿方健康餐 ${pct(by((r) => r.meal), N)}，其中慢性病 ${pct(by((r) => r.meal && r.chronic), by((r) => r.meal))}；沒有的慢性病 ${pct(by((r) => !r.meal && r.chronic), by((r) => !r.meal))}`);
+      console.log(`  公司股份：處理過 ${pct(by((r) => r.shares > 0), N)}  選擇保留 ${pct(by((r) => r.holdings > 0), N)}`);
       const stuck = runs.filter((r) => r.stuck);
       if (stuck.length) console.log(`  ⚠️ 卡住 ${stuck.length} 局：${JSON.stringify(stuck.slice(0, 3).map((r) => r.stuck))}`);
     }

@@ -24,6 +24,8 @@
     { name: '執行長', salary: 10000000, req: { leader: 78, social: 70 } },
   ];
   const PROMO_NEED = [2, 3, 4, 6, 8, 8];
+  // 畢業求職時，KE 好友度達到這個值會幫你內推科技大廠
+  const KE_REFERRAL = 50;
   const STARTUP = [
     { name: '車庫創業', icon: '🚗', bonus: 0 },
     { name: '種子輪', icon: '🌱', bonus: 500000 },
@@ -65,12 +67,14 @@
       const score = s.stats.tech + s.stats.study * 0.3 + s.eng.interns * 8 + (s.eng.topUni ? 10 : 0) + s.stats.social * 0.1 + AW.randInt(-5, 5);
       const tiers = [0];
       if (score >= 45) tiers.push(1);
-      if (score >= 65) tiers.push(2);
+      // KE 好友度夠高：內推台極半導體（科技大廠）
+      const referral = score < 65 && AW.NPC.bond(s, 'ke') >= KE_REFERRAL;
+      if (score >= 65 || referral) tiers.push(2);
       const options = tiers.reverse().map((t) => {
-        const name = AW.pick(COMPANY_NAMES[t]);
+        const name = t === 2 && referral ? '台極半導體' : AW.pick(COMPANY_NAMES[t]);
         const c = COMPANY[t];
         return {
-          label: `${c.icon} ${name}（${c.name}）`,
+          label: `${c.icon} ${name}（${c.name}）${t === 2 && referral ? AW.tx('npc.ke', 'referral_tag') : ''}`,
           desc: `起薪 ${AW.fmtMoney(RANKS[0].salary * c.mult)}／年，升遷速度${c.speed < 1 ? '快' : c.speed > 1 ? '慢' : '普通'}`,
           apply: (st) => {
             st.eng.stage = 'job';

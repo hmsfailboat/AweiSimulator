@@ -258,8 +258,10 @@
       if (s.phase === 'esports') {
         const main = s.esports.game;
         const other = main === 'fps' ? 'dota' : 'fps';
-        skills = [this.bar(s, main, { cls: 'hl', label: `主項目・${AW.STATS[main].name}` }), this.bar(s, 'reflex'), this.bar(s, 'teamwork'),
-          this.bar(s, 'fame'), this.bar(s, 'social'), this.bar(s, other, { cls: 'dim' })];
+        // DOTA 的個人戰力也看戰術
+        skills = [this.bar(s, main, { cls: 'hl', label: `主項目・${AW.STATS[main].name}` }), this.bar(s, 'reflex'), this.bar(s, 'teamwork')]
+          .concat(main === 'dota' ? [this.bar(s, 'tactics')] : [])
+          .concat([this.bar(s, 'fame'), this.bar(s, 'social'), this.bar(s, other, { cls: 'dim' })]);
       } else if (s.phase === 'engineer') {
         skills = [this.bar(s, 'tech', { cls: 'hl' }), this.bar(s, 'leader'), this.bar(s, 'social'), this.bar(s, 'study'),
           this.bar(s, AW.resolveKey(s, 'best'), { cls: 'dim' })];
@@ -371,6 +373,9 @@
           <div class="c-row"><span>${T.icon} ${esc(e.team)}</span><span class="muted">${T.name}</span></div>
           <div class="c-row"><span>個人戰力 <b>${Math.round(AW.Esports.power(s))}</b></span><span>隊伍戰力 <b>${Math.round(AW.Esports.teamPower(s))}</b></span></div>
           <div class="c-row"><span>🥇 ×${e.domesticTitles}　🏆 ×${e.worldTitles}</span><span class="muted">世界賽最佳：${['—', '小組賽', '八強', '四強', '亞軍', '冠軍'][e.bestWorlds]}</span></div>
+          ${e.game === 'dota'
+            ? `<div class="c-row"><span>📋 本年版本：${esc(AW.Esports.metaText(s) || '—')}</span></div>`
+            : `<div class="c-row"><span>💥 ACE ×${e.aces || 0}　🌟 MVP ×${e.mvps || 0}</span><span class="muted">${AW.Esports.retireAge(s)} 歲退役</span></div>`}
         </div>`;
       }
       if (s.phase === 'engineer') {
@@ -836,6 +841,7 @@
         <div class="name-preview">顯示名稱：<b id="name-preview">Aweiisa${esc(this.ui.nameDraft || '＿＿＿')}</b></div>
         <h3>主攻項目</h3>
         <div class="game-opts">${opt('fps')}${opt('dota')}</div>
+        <p class="muted small game-desc">${esc(AW.tx('esports', 'game_' + g, s))}</p>
         <div class="row end"><button class="btn primary big" id="confirm-name" data-act="confirm-name" ${this.ui.nameDraft ? '' : 'disabled'}>✍️ 簽下合約 ▶</button></div>
       </section>`;
     },
@@ -953,19 +959,30 @@
       const styles = F.STYLES.map((st, i) => `<button class="tab ${f.style === i ? 'on' : ''}" data-act="set-style" data-i="${i}" ${open ? '' : 'disabled'}>
         ${esc(AW.tx('finance', 'style_' + st.id, s))}<small>${esc(AW.tx('finance', 'style_' + st.id + '_desc', s))}</small></button>`).join('');
       const money = s.stats.money;
-      const amts = [100000, 1000000, 10000000, 100000000, 1000000000].filter((a) => a <= money);
+      const STEPS = [100000, 1000000, 10000000, 100000000, 1000000000];
+      const amts = STEPS.filter((a) => a <= money);
       const inv = Object.keys(F.PRODUCTS).filter((id) => F.productOk(s, id) || f.inv[id]).map((id) => {
         const pos = F.position(s, id);
         const v = pos.v;
         const btns = F.productOk(s, id) && open ? amts.map((a) => `<button class="bet" data-act="invest" data-id="${id}" data-a="${a}">+${AW.fmtMoney(a)}</button>`).join('')
           + (money > 0 ? `<button class="bet all" data-act="invest" data-id="${id}" data-a="all">全部</button>` : '') : '';
+        // 贖回：固定金額（小於市值才顯示）、一半、全部
+        const sells = v && open ? '<span class="muted small">贖回</span>'
+          + STEPS.filter((a) => a < v).map((a) => `<button class="bet sell" data-act="withdraw" data-id="${id}" data-a="${a}">-${AW.fmtMoney(a)}</button>`).join('')
+          + (v >= 20000 && !STEPS.includes(Math.round(v / 2)) ? `<button class="bet sell" data-act="withdraw" data-id="${id}" data-a="${Math.round(v / 2)}">一半</button>` : '')
+          + `<button class="bet sell all" data-act="withdraw" data-id="${id}" data-a="all">全部</button>` : '';
         return `<div class="shop-item"><div class="si-body"><b>${esc(AW.tx('finance', 'inv_' + id, s))}</b>
             <span class="muted small">${esc(AW.tx('finance', 'inv_' + id + '_desc', s))}</span>
-            <div class="bets left">${btns}</div></div>
+            <div class="bets left">${btns}</div>
+            ${sells ? `<div class="bets left">${sells}</div>` : ''}</div>
           <div class="inv-val"><b class="gold">${v ? AW.fmtMoney(v) : '—'}</b>
-            ${v ? `<small class="muted">成本 ${AW.fmtMoney(pos.cost)}</small><small class="${pos.pl >= 0 ? 'ok' : 'bad'}">${esc(F.fmtPL(pos.pl, pos.pct))}</small>` : ''}
-            ${v && open ? `<button class="btn sm" data-act="withdraw" data-id="${id}">贖回</button>` : ''}</div></div>`;
+            ${v ? `<small class="muted">成本 ${AW.fmtMoney(pos.cost)}</small><small class="${pos.pl >= 0 ? 'ok' : 'bad'}">${esc(F.fmtPL(pos.pl, pos.pct))}</small>` : ''}</div></div>`;
       }).join('');
+      // 保留的公司股份
+      const holds = (s.holdings || []).map((h, i) => `<div class="shop-item"><div class="si-body"><b>📜 ${esc(h.name)}</b>
+            <span class="muted small">${esc(AW.tx('second', 'shares_hold_desc', s, { 年齡: h.since }))}</span></div>
+          <div class="inv-val"><b class="gold">${AW.fmtMoney(h.div)}／年</b>
+            ${open ? `<button class="btn sm" data-act="sell-holding" data-i="${i}">賣掉（${AW.fmtMoney(AW.Second.holdingValue(h))}）</button>` : ''}</div></div>`).join('');
       const loans = f.loans.map((l) => `<div class="c-row"><span>${esc(AW.tx('finance', 'line_loan_' + l.id, s))}</span><span>每年 ${AW.fmtMoney(l.pay)}・還剩 ${l.left} 年</span></div>`).join('');
       return `<h3>💰 理財 <span class="pill gold">💰 ${AW.fmtMoney(money)}</span>${f.taxTotal ? `<span class="pill">🧾 累計繳稅 ${AW.fmtMoney(f.taxTotal)}</span>` : ''}</h3>
         <h4 class="shop-h">🏠 生活水準 <small>${F.active(s) ? `今年生活費 ${AW.fmtMoney(F.livingCost(s))}` : '還沒出社會，暫時不用付'}</small></h4>
@@ -974,6 +991,7 @@
         <h4 class="shop-h">📈 投資 <small>${esc(AW.tx('finance', 'inv_hint', s))}</small></h4>
         ${this.rInvestSummary(s)}
         ${inv}
+        ${holds ? `<h4 class="shop-h">📜 公司股份 <small>${esc(AW.tx('second', 'shares_hint', s))}</small></h4>${holds}` : ''}
         ${loans ? `<h4 class="shop-h">🏦 貸款</h4>${loans}` : ''}
         ${E.canFire(s) || s.phase === 'ended' ? '' : (s.age >= 30 ? `<p class="muted small">🏖️ 財富自由目標：35～49 歲時身家 ${AW.fmtMoney(E.fireTarget(s))}（每年開銷 × 25，最少 ${AW.fmtMoney(E.FIRE.min)}），且心情 70 以上</p>` : '')}
         <div class="row end"><button class="btn primary" data-act="close-modal">關閉</button></div>`;
@@ -1002,8 +1020,10 @@
         const hires = Object.keys(AW.STAFF).filter((job) => AW.STAFF[job].npc === id).map((job) => {
           const st = AW.NPC.hireState(s, job);
           if (st.hidden) return '';
-          const label = job === 'chef' ? '🍳 請他當私人廚師' : '🛡️ 請他當保全';
-          if (st.hired) return `<button class="btn sm danger" data-act="fire-staff" data-job="${job}">解除雇用（年薪 ${AW.fmtMoney(AW.STAFF[job].salary)}）</button>`;
+          // 已經請了升級版（私人廚師、貼身保全），就不顯示較低階的雇用
+          if (Object.keys(AW.STAFF).some((j) => AW.STAFF[j].replaces === job && s.staff && s.staff[j])) return '';
+          const label = AW.tx('staff.' + job, 'btn', s);
+          if (st.hired) return `<button class="btn sm danger" data-act="fire-staff" data-job="${job}">解除「${esc(AW.tx('staff.' + job, 'name', s))}」（年薪 ${AW.fmtMoney(AW.STAFF[job].salary)}）</button>`;
           return `<button class="btn sm ${st.ok ? 'primary' : ''}" data-act="hire" data-job="${job}" ${st.ok ? '' : 'disabled'}>${label}（年薪 ${AW.fmtMoney(AW.STAFF[job].salary)}）</button>${st.ok ? '' : `<span class="ac-lock">🔒 ${esc(st.reason)}</span>`}`;
         }).join('');
         return `<div class="npc-card"><div class="si-icon">${AW.NPC.icon(id)}</div><div class="si-body">
@@ -1183,7 +1203,12 @@
         this.modalUpdate(this.rFinance(), 'wide');
       },
       withdraw(d) {
-        if (!AW.Finance.withdraw(this.S, d.id)) return;
+        if (!AW.Finance.withdraw(this.S, d.id, d.a === 'all' ? 'all' : Number(d.a))) return;
+        this.render();
+        this.modalUpdate(this.rFinance(), 'wide');
+      },
+      'sell-holding'(d) {
+        if (!AW.Shop.open(this.S) || !AW.Second.sellHolding(this.S, Number(d.i))) return;
         this.render();
         this.modalUpdate(this.rFinance(), 'wide');
       },

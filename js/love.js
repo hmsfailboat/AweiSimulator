@@ -13,7 +13,7 @@
   // 好感度層級：熱戀（成長、擲骰加成）、穩定（每年心情加分）、冷淡（每年心情扣分）
   const TIERS = { passion: 80, steady: 50, cold: 30, passionGrowth: 0.05, passionRoll: 0.05, steadyMood: 4, marriedMood: 6, coldMood: -3 };
   // 打電動、運動類行動（電競迷、運動系另一半用來判斷）
-  const PLAY_ACTS = ['solo_grind', 'scrim', 'review_vod', 'stream', 'uni_game', 'sm_live', 'sm_video', 'sm_collab', 'co_tactics'];
+  const PLAY_ACTS = ['solo_grind', 'scrim', 'review_vod', 'aim_train', 'draft_study', 'stream', 'uni_game', 'sm_live', 'sm_video', 'sm_collab', 'co_tactics'];
   const EXERCISE_ACTS = ['sports', 'gym', 'walk', 'crawl'];
 
   // 另一半的類型

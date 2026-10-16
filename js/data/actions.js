@@ -19,6 +19,7 @@
   const LOVE = TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', 'elder', SECOND);
   const OLD = ['retired', 'elder'];
   const hasKids = (s) => s.kids.length > 0;
+  const isGame = (s, g) => !!s.esports && s.esports.game === g;
 
   AW.ACTIONS = [
     // ---------------- 嬰幼兒 ----------------
@@ -93,9 +94,17 @@
     { id: 'reflex_drill', stages: ['pro'],
       effects: { reflex: 6, mood: -2 } },
     { id: 'scrim', stages: ['pro'],
-      effects: { teamwork: 8, main: 2, mood: -1 } },
+      effects: (s) => (isGame(s, 'dota') ? { teamwork: 8, main: 2, tactics: 2, mood: -1 } : { teamwork: 8, main: 2, mood: -1 }) },
     { id: 'review_vod', stages: ['pro'],
-      effects: { main: 4, teamwork: 4, mood: -2 } },
+      effects: (s) => (isGame(s, 'dota') ? { main: 3, teamwork: 3, tactics: 3, mood: -2 } : { main: 4, teamwork: 4, mood: -2 }) },
+    // FPS 專屬：今年 ACE 機率提高
+    { id: 'aim_train', stages: ['pro'], cond: (s) => isGame(s, 'fps'), hideLocked: true,
+      effects: { main: 5, reflex: 3, mood: -3, health: -2 },
+      run(s) { s.yearFlags.aim = 1; return { text: AW.tx('action.aim_train', 'msg', s) }; } },
+    // DOTA 專屬：今年的版本契合度至少 +3
+    { id: 'draft_study', stages: ['pro'], cond: (s) => isGame(s, 'dota'), hideLocked: true,
+      effects: { tactics: 6, main: 2, mood: -2 },
+      run(s) { AW.Esports.readMeta(s); return { text: AW.tx('action.draft_study', 'msg', s, { 版本: AW.Esports.metaText(s) }) }; } },
     { id: 'stream', stages: ['pro'], income: (s) => 30000 + s.stats.fame * 3000,
       effects: { fame: 6, mood: 3, main: 1 } },
     { id: 'gym', stages: WORK,
@@ -162,7 +171,14 @@
     // ---------------- 感情（有交往對象時） ----------------
     { id: 'date', stages: LOVE, cond: (s) => AW.Love.active(s), hideLocked: true,
       cost: (s) => (s.age < 18 ? 500 : s.age < 23 ? 3000 : 10000),
-      effects: { love: 15, mood: 8, social: 2 } },
+      effects: { love: 15, mood: 8, social: 2 },
+      // 成年後去阿方的餐廳約會：好感度多加一點
+      run(s) {
+        const C = AW.FANG_CARE;
+        if (s.age < 18 || AW.NPC.bond(s, 'fang') < C.dateBond) return { text: '' };
+        const v = AW.NPC.addBond(s, 'fang', 2);
+        return { text: AW.tx('action.date', 'msg_fang', s), deltas: AW.applyEffects(s, { love: C.dateLove }), bonds: v ? [{ id: 'fang', v }] : [] };
+      } },
 
     // ---------------- 朋友：胡投顧 ----------------
     { id: 'hu_chat', stages: ['extra', 'pro', 'uni', 'job', 'startup'].concat(SECOND, 'elder'), hideLocked: true,
@@ -171,6 +187,45 @@
       run(s) {
         const v = AW.NPC.addBond(s, 'hu', AW.NPC_BOND.chat * (1 + s.stats.social / 200));
         return { text: AW.tx('action.hu_chat', 'msg', s), bonds: v ? [{ id: 'hu', v }] : [] };
+      } },
+
+    // ---------------- 朋友：阿方、Corey（v2.3） ----------------
+    { id: 'fang_meal', stages: TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', SECOND, 'elder'), hideLocked: true,
+      cond: (s) => AW.NPC.met(s, 'fang'),
+      effects: { health: 8, mood: 5 },
+      run(s) {
+        const v = AW.NPC.addBond(s, 'fang', AW.NPC_BOND.chat * (1 + s.stats.social / 200));
+        return { text: AW.tx('action.fang_meal', 'msg', s), bonds: v ? [{ id: 'fang', v }] : [] };
+      } },
+    // Corey 打輔助很細心：跟他雙排練默契
+    { id: 'corey_duo', stages: TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', SECOND, 'elder'), tags: ['game'], hideLocked: true,
+      cond: (s) => AW.NPC.met(s, 'corey'),
+      effects: { main: 3, teamwork: 5, mood: 4, health: -1 },
+      run(s) {
+        const v = AW.NPC.addBond(s, 'corey', AW.NPC_BOND.chat * (1 + s.stats.social / 200));
+        return { text: AW.tx('action.corey_duo', 'msg', s), bonds: v ? [{ id: 'corey', v }] : [] };
+      } },
+
+    // ---------------- 朋友：KE、發哥（v2.3） ----------------
+    { id: 'ke_fight', stages: TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', SECOND, 'elder'), tags: ['game'], hideLocked: true,
+      cond: (s) => AW.NPC.met(s, 'ke'),
+      effects: { reflex: 4, mood: 5, health: -1 },
+      run(s) {
+        const v = AW.NPC.addBond(s, 'ke', AW.NPC_BOND.chat * (1 + s.stats.social / 200));
+        return { text: AW.tx('action.ke_fight', 'msg', s), bonds: v ? [{ id: 'ke', v }] : [] };
+      } },
+    // 請發哥宣傳：名氣上升；實況主訂閱、創業衝刺點數另有加成
+    { id: 'fa_promo', stages: ['pro', 'startup', 'streamer', 'coach', 'biz'], hideLocked: true,
+      cond: (s) => AW.NPC.met(s, 'fa') && AW.NPC.bond(s, 'fa') >= AW.NPC_BOND.promoBond,
+      cost: (s) => AW.NPC_BOND.promoCost / (AW.NPC.bond(s, 'fa') >= AW.NPC_BOND.promoFriend ? 2 : 1),
+      effects: { fame: 6, mood: 2 },
+      run(s) {
+        const v = AW.NPC.addBond(s, 'fa', 3);
+        const stage = AW.Engine.stageKey(s);
+        let key = 'msg';
+        if (stage === 'streamer') { s.second.subs = Math.round(s.second.subs * 1.08); key = 'msg_streamer'; }
+        if (stage === 'startup' || stage === 'biz') { s.yearSp += 2; key = 'msg_biz'; }
+        return { text: AW.tx('action.fa_promo', key, s), bonds: v ? [{ id: 'fa', v }] : [] };
       } },
 
     // ---------------- 感情、家庭（v2.0） ----------------

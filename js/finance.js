@@ -22,6 +22,7 @@
     stock: { mean: 0.08, sd: 0.35 },
     crypto: { mean: 0.12, sd: 0.75 },
     hu: { mean: 0.12, sd: 0.22, need: (s) => AW.NPC.bond(s, 'hu') >= 60 },
+    tsmc: { mean: 0.1, sd: 0.25, need: (s) => AW.NPC.bond(s, 'ke') >= 50 },
   };
   const DEBT = { rate: 0.15, years: 3, minLimit: 5000000, incomeMult: 5, stress: 4 };
   const DOWN_YEARS = 2;
@@ -151,16 +152,32 @@
       AW.applyEffects(s, { money: -amount });
       s.fin.inv[id] = (s.fin.inv[id] || 0) + amount;
       s.fin.cost[id] = (s.fin.cost[id] || 0) + amount;
-      AW.Engine.addLog(s, '📈', `投入 ${AW.fmtMoney(amount)} 到「${AW.tx('finance', 'inv_' + id, s)}」（成本合計 ${AW.fmtMoney(s.fin.cost[id])}）`);
+      // 同一年投入同一檔，人生紀錄只留一筆
+      AW.Engine.logOnce(s, 'invest:' + id, (e) => {
+        e.amt = (e.amt || 0) + amount;
+        e.icon = '📈';
+        e.text = AW.tx('finance', 'log_invest', s, { 金額: AW.fmtMoney(e.amt), 商品: AW.tx('finance', 'inv_' + id, s), 成本: AW.fmtMoney(s.fin.cost[id]) });
+      });
       AW.Save.save(s);
       return true;
     },
-    withdraw(s, id) {
+    // 贖回：amount 為金額或 'all'
+    withdraw(s, id, amount) {
       const v = s.fin.inv[id] || 0;
       if (!v || !AW.Shop.open(s)) return false;
-      const r = this.sell(s, id, v);
+      amount = amount === 'all' || amount == null ? v : Math.min(v, Math.round(amount));
+      if (!(amount > 0)) return false;
+      const r = this.sell(s, id, amount);
       AW.applyEffects(s, { money: r.cash });
-      AW.Engine.addLog(s, r.pl >= 0 ? '💵' : '💸', `贖回「${AW.tx('finance', 'inv_' + id, s)}」${AW.fmtMoney(r.cash)}，實現損益 ${this.fmtPL(r.pl, r.pct)}`);
+      // 同一年贖回同一檔，人生紀錄只留一筆（金額、損益累加）
+      AW.Engine.logOnce(s, 'withdraw:' + id, (e) => {
+        e.amt = (e.amt || 0) + r.cash;
+        e.pl = (e.pl || 0) + r.pl;
+        e.cost = (e.cost || 0) + r.cash - r.pl;
+        e.icon = e.pl >= 0 ? '💵' : '💸';
+        e.text = AW.tx('finance', 'log_withdraw', s, { 金額: AW.fmtMoney(e.amt), 商品: AW.tx('finance', 'inv_' + id, s),
+          損益: this.fmtPL(e.pl, e.cost ? e.pl / e.cost : null) });
+      });
       AW.Save.save(s);
       return true;
     },
@@ -215,6 +232,13 @@
       if (parts.length) AW.Engine.addLog(s, y.invest >= 0 ? '📈' : '📉', `投資年度損益 ${y.invest >= 0 ? '+' : '-'}${AW.fmtMoney(Math.abs(y.invest))}：${parts.join('、')}`);
       if (y.invest >= 5000000) s.flags.bigInvest = 1;
 
+      // 保留的公司股份：每年的股利（計入所得）
+      const div = s.holdings && s.holdings.length ? AW.Second.holdingsYear(s) : 0;
+      if (div) {
+        f.income += div;
+        AW.applyEffects(s, { money: div });
+        y.lines.push({ key: 'dividend', v: div });
+      }
       if (this.active(s)) {
         const tax = this.tax(f.income);
         if (tax) { pay('tax', tax); f.taxTotal += tax; }

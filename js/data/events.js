@@ -7,7 +7,8 @@
  *   income: 職涯收入（計入所得稅）；bond: 朋友好友度變化，例 { haji: 5 }
  *   year: 本年度暫時旗標（例 noGame）；next: 下一年旗標；flags: 永久旗標
  * phase: student / esports / engineer / second（第二幕與晚年）/ any，也可以是陣列，例 ['student', 'esports']
- * threat: true → 雇用保全後不會發生；bond 也可以是 (s) => ({ 代號: 變化 })
+ * threat: 'public' 外出時的威脅（請了活動保鑣或貼身保全就不會發生）；'home' 居家威脅（只有貼身保全擋得住）
+ * bond 也可以是 (s) => ({ 代號: 變化 })
  * force: true → 條件成立時一定發生（連續事件的後續，例：併購案隔年的整合）
  * 無 choices 的事件本身就是一個 outcome。
  * choice: { cond, ...outcome } 或 { cond, roll: { chance, success, fail } }
@@ -24,6 +25,12 @@
   const met = (id) => (s) => AW.NPC.met(s, id);
   const bond = (s, id) => AW.NPC.bond(s, id);
   const adult = (s) => s.age >= 18;
+  const isGame = (s, g) => !!s.esports && s.esports.game === g;
+  // KE 被派到美國廠的那幾年
+  const keAway = (s) => !!(s.npcs.ke && s.npcs.ke.away);
+  // 勒索信：現金的 3%（最多 3000 萬），第一次算出來就記在今年
+  const extortAmount = (s) => s.yearFlags.extort
+    || (s.yearFlags.extort = Math.min(30000000, Math.round(Math.max(0, s.stats.money) * 0.03 / 10000) * 10000));
   const hasDebt = (s) => s.stats.money < 0;
   // 第二幕：正在做某個工作（還沒到退休年齡）
   const job = (id) => (s) => s.second.job === id && AW.Second.working(s);
@@ -53,7 +60,9 @@
   const squadLines = (s) => {
     const tier = s.age < 18 ? 'teen' : s.age >= 65 ? 'old' : 'adult';
     const list = AW.NPC.gamers(s).map((id) => AW.tx('npc.' + id, 'squad_' + tier, s)).join('、');
-    return AW.NPC.met(s, 'hu') ? list + '——' + AW.tx('npc.hu', 'squad_' + tier, s) : list + '。';
+    // 偶爾陪玩的朋友（胡投顧、KE）接在破折號後面
+    const extra = AW.NPC.squadMembers(s).filter((id) => !AW.NPCS[id].gamer).map((id) => AW.tx('npc.' + id, 'squad_' + tier, s));
+    return extra.length ? list + '——' + extra.join('；') : list + '。';
   };
   // 狗狗陪伴的年數
   const DOG_YEARS = 14;
@@ -632,6 +641,8 @@
           success: { effects: { mood: 3 } },
           fail: { effects: (s) => ({ money: -Math.round(s.stats.money * 0.1), mood: -12 }) } } },
         { effects: {} },
+        // 高原是公安，一眼就看穿詐騙話術
+        { cond: (s) => met('gao')(s) && bond(s, 'gao') >= 40, hideLocked: true, effects: { mood: 4, study: 1 }, bond: { gao: 4 } },
       ] },
     { id: 'family_ill', phase: 'any', weight: 2, cond: (s) => s.age >= 12 && s.age < 60,
       choices: [
@@ -714,6 +725,11 @@
             success: { effects: { money: -100000, mood: 15, love: 10 }, run: (s) => AW.Love.engage(s) },
             fail: { effects: { mood: -12, love: -10 } } } },
         { effects: { love: -3 } },
+        // 在阿方的餐廳求婚：阿方會幫忙佈置，成功率更高
+        { cond: (s) => s.stats.money >= 100000 && met('fang')(s) && bond(s, 'fang') >= AW.FANG_CARE.proposeBond, hideLocked: true,
+          roll: { chance: (s) => AW.clamp(s.stats.love / 100 + 0.1 + AW.FANG_CARE.proposeBonus, 0.3, 0.98),
+            success: { effects: { money: -100000, mood: 18, love: 12 }, bond: { fang: 5 }, run: (s) => AW.Love.engage(s) },
+            fail: { effects: { mood: -10, love: -8 }, bond: { fang: 2 } } } },
       ] },
     { id: 'love_wedding', phase: 'any', weight: 1000, cond: (s) => dating(s) && s.love.status === 'engaged',
       choices: [
@@ -722,6 +738,9 @@
           run: (s) => AW.Love.marry(s) },
         { cond: (s) => s.stats.money >= 2000000, effects: { money: -2000000, mood: 20, love: 15, social: 5, fame: 5 },
           run: (s) => AW.Love.marry(s) },
+        // 請阿方外燴：比小婚禮便宜，賓客吃得更開心
+        { cond: (s) => s.stats.money >= 150000 && met('fang')(s) && bond(s, 'fang') >= AW.FANG_CARE.proposeBond, hideLocked: true,
+          effects: { money: -150000, mood: 16, love: 12, social: 3, health: 2 }, bond: { fang: 6 }, run: (s) => AW.Love.marry(s) },
       ] },
     { id: 'love_anniv', phase: 'any', weight: 5, cond: (s) => dating(s) && s.love.status === 'married',
       choices: [
@@ -869,7 +888,7 @@
           success: { effects: { fame: 2, mood: 6 } },
           fail: { effects: { health: -6, mood: -6 } } } },
       ] },
-    { id: 'npc_corey_stalker', phase: 'any', weight: 5, threat: true, cond: (s) => adult(s) && s.stats.fame >= 35,
+    { id: 'npc_corey_stalker', phase: 'any', weight: 5, threat: 'public', cond: (s) => adult(s) && s.stats.fame >= 35,
       choices: [
         { cond: (s) => met('corey')(s) && bond(s, 'corey') >= 40, hideLocked: true, effects: { mood: 2 }, bond: { corey: 6 } },
         { effects: { mood: -8 } },
@@ -877,7 +896,7 @@
           success: { effects: { mood: 2 } },
           fail: { effects: { health: -10, mood: -10 } } } },
       ] },
-    { id: 'robbery', phase: 'any', weight: 4, threat: true,
+    { id: 'robbery', phase: 'any', weight: 4, threat: 'home',
       cond: (s) => s.age >= 25 && (s.stats.money >= 5000000 || (s.items && s.items.mansion)),
       effects: (s) => ({ money: -Math.min(5000000, Math.round(Math.max(0, s.stats.money) * 0.03)), mood: -10 }) },
 
@@ -977,6 +996,208 @@
     { id: 'rival_hug', phase: 'esports', weight: 4, cond: (s) => s.rival && s.rival.w + s.rival.l >= 2,
       vars: (s) => AW.Esports.rivalVars(s),
       effects: { mood: 6, teamwork: 2 }, bond: { wang: 10 } },
+
+    // ======================= FPS／DOTA 專屬（v2.3） =======================
+    // FPS：殘局 1 打 5
+    { id: 'fps_clutch', phase: 'esports', weight: 6, cond: (s) => isGame(s, 'fps'),
+      choices: [
+        { effects: { fame: 6, mood: 4, teamwork: -2 } },
+        { effects: { fame: 2, teamwork: 4 } },
+      ] },
+    // FPS：改打狙擊位（之後 ACE 機率提高）
+    { id: 'fps_awp', phase: 'esports', once: true, weight: 6, cond: (s) => isGame(s, 'fps') && s.age >= 19,
+      choices: [
+        { effects: { reflex: 2, main: -2, mood: 2 }, flags: { awper: 1 } },
+        { effects: { main: 2, teamwork: -2 } },
+      ] },
+    // FPS：新的 FPS 大作上市，戰隊開分部
+    { id: 'fps_new_title', phase: 'esports', once: true, weight: 4, cond: (s) => isGame(s, 'fps') && s.age >= 21,
+      choices: [
+        { effects: { main: -6, fame: 8, mood: 6 }, income: 1000000 },
+        { effects: { teamwork: 4, mood: 2 } },
+      ] },
+    // FPS：排位遇到外掛
+    { id: 'fps_cheater', phase: 'esports', weight: 4, cond: (s) => isGame(s, 'fps'),
+      choices: [
+        { effects: { fame: 2, mood: -2 } },
+        { roll: { chance: 0.5,
+          success: { effects: { fame: 5, mood: 5 } },
+          fail: { effects: { fame: -2, mood: -6 } } } },
+      ] },
+    // DOTA：大改版（今年的版本契合度）
+    { id: 'dota_patch', phase: 'esports', weight: 6, cond: (s) => isGame(s, 'dota'),
+      choices: [
+        { effects: { tactics: 4, mood: -3 }, run: (s) => { AW.Esports.readMeta(s); } },
+        { effects: { main: 2 }, run: (s) => { s.yearFlags.metaFit = (s.yearFlags.metaFit || 0) - 2; } },
+      ] },
+    // DOTA：招牌英雄被 ban 光
+    { id: 'dota_ban', phase: 'esports', weight: 5, cond: (s) => isGame(s, 'dota') && s.stats.fame >= 20,
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.tactics / 100, 0.2, 0.85),
+          success: { effects: { fame: 6, mood: 5, tactics: 2 } },
+          fail: { effects: { fame: -3, mood: -4 } } } },
+        { effects: { teamwork: 5, fame: -1 } },
+      ] },
+    // DOTA：九十分鐘的馬拉松
+    { id: 'dota_marathon', phase: 'esports', weight: 4, cond: (s) => isGame(s, 'dota'),
+      effects: { health: -6, fame: 5, mood: 3, teamwork: 2 } },
+    // DOTA：隊友的信使送頭
+    { id: 'dota_courier', phase: 'esports', weight: 4, cond: (s) => isGame(s, 'dota'),
+      choices: [
+        { effects: { mood: 3, teamwork: -3 } },
+        { effects: { teamwork: 3, mood: 2 } },
+      ] },
+
+    // ======================= 新朋友：KE、高原、發哥（v2.3） =======================
+    // KE：台積電工程師、格鬥遊戲高手
+    { id: 'ke_arcade', phase: 'student', weight: 6, cond: (s) => s.age >= 12 && met('ke')(s),
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.reflex / 90, 0.15, 0.8),
+          success: { effects: { reflex: 3, mood: 6 }, bond: { ke: 4 } },
+          fail: { effects: { reflex: 2, mood: -2 }, bond: { ke: 3 } } } },
+        { effects: { reflex: 4, study: 1 }, bond: { ke: 5 } },
+      ] },
+    { id: 'ke_fab_call', phase: 'any', weight: 4, cond: (s) => s.age >= 24 && met('ke')(s) && !keAway(s),
+      choices: [
+        { cond: (s) => s.stats.money >= 1000, effects: { money: -1000, mood: 2 }, bond: { ke: 6 } },
+        { effects: { mood: -1 }, bond: { ke: -3 } },
+      ] },
+    { id: 'ke_overwork', phase: 'any', weight: 3, cond: (s) => s.age >= 26 && s.age < 60 && met('ke')(s) && !keAway(s),
+      choices: [
+        { effects: { health: 4, mood: 2 }, bond: { ke: 5 } },
+        { effects: { mood: 1 }, bond: { ke: 1 } },
+      ] },
+    { id: 'ke_evo', phase: 'any', once: true, weight: 5,
+      cond: (s) => s.age >= 20 && s.age <= 50 && met('ke')(s) && bond(s, 'ke') >= 40 && s.stats.money >= 60000 && !keAway(s),
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.reflex / 100, 0.15, 0.8),
+          success: { effects: { money: -60000, fame: 6, reflex: 2, mood: 10 }, bond: { ke: 8 }, flags: { keEvo: 1 } },
+          fail: { effects: { money: -60000, mood: 6 }, bond: { ke: 6 } } } },
+        { bond: { ke: -3 } },
+      ] },
+    // 去 KE 家打格鬥，他穿著居家戰袍開門
+    { id: 'ke_homewear', phase: 'any', once: true, weight: 4,
+      cond: (s) => s.age >= 22 && met('ke')(s) && !keAway(s),
+      choices: [
+        { effects: { mood: 5 }, bond: { ke: 2 } },
+        { effects: { reflex: 2, mood: 2 }, bond: { ke: 4 } },
+        { roll: { chance: (s) => AW.clamp(0.3 + bond(s, 'ke') / 150, 0.3, 0.85),
+          success: { effects: { mood: 8, social: 1 }, bond: { ke: 3 } },
+          fail: { effects: { mood: -2 }, bond: { ke: -6 } } } },
+      ] },
+    // 被派到美國廠，3 年後回來
+    { id: 'ke_arizona', phase: 'any', once: true, weight: 5, cond: (s) => s.age >= 28 && s.age <= 45 && met('ke')(s),
+      choices: [
+        { cond: (s) => s.stats.money >= 20000, effects: { money: -20000, mood: 3 }, bond: { ke: 8 }, run: (s) => { s.npcs.ke.away = s.age; } },
+        { bond: { ke: 2 }, run: (s) => { s.npcs.ke.away = s.age; } },
+      ] },
+    { id: 'ke_return', phase: 'any', once: true, weight: 200, cond: (s) => met('ke')(s) && s.npcs.ke.away && s.age - s.npcs.ke.away >= 3,
+      effects: { mood: 6 }, bond: { ke: 5 }, run: (s) => { s.npcs.ke.away = 0; } },
+
+    // 高原：中國的公安，FPS 開黑夥伴（講話都是簡體字）
+    { id: 'gao_vpn', phase: 'any', weight: 5, cond: (s) => s.age >= 14 && met('gao')(s),
+      choices: [
+        { effects: { mood: -1 }, bond: { gao: 4 } },
+        { effects: { best: 1 }, bond: { gao: -2 } },
+      ] },
+    { id: 'gao_slang', phase: 'any', weight: 4, cond: (s) => s.age >= 14 && met('gao')(s),
+      choices: [
+        { effects: { study: 1, mood: 3 }, bond: { gao: 2 } },
+        { effects: { social: 2, mood: 3 }, bond: { gao: 4 } },
+      ] },
+    { id: 'gao_duty', phase: 'any', weight: 4, cond: (s) => s.age >= 18 && met('gao')(s),
+      effects: { mood: 4, best: 1 }, bond: { gao: 3 } },
+    { id: 'gao_hongbao', phase: 'any', weight: 3, cond: (s) => s.age >= 16 && met('gao')(s),
+      choices: [
+        { effects: { mood: 4, social: 1 }, bond: { gao: 4 } },
+        { cond: (s) => s.stats.money >= 888, effects: { money: -888, mood: 3 }, bond: { gao: 6 } },
+      ] },
+    { id: 'gao_visit', phase: 'any', once: true, weight: 6,
+      cond: (s) => s.age >= 22 && met('gao')(s) && bond(s, 'gao') >= 50,
+      choices: [
+        { cond: (s) => s.stats.money >= 50000, effects: { money: -50000, mood: 12, health: -2 }, bond: { gao: 12 }, flags: { gaoMeet: 1 } },
+        { effects: { mood: 2 }, bond: { gao: 2 } },
+      ] },
+    { id: 'gao_worlds', phase: 'esports', once: true, weight: 8, cond: (s) => met('gao')(s) && s.esports.bestWorlds >= 1,
+      effects: { mood: 6, fame: 2 }, bond: { gao: 5 } },
+
+    // 阿方：戰隊營養師（職業選手）
+    { id: 'fang_nutritionist', phase: 'esports', once: true, weight: 8,
+      cond: (s) => met('fang')(s) && bond(s, 'fang') >= AW.FANG_CARE.nutriBond,
+      choices: [
+        { effects: { health: 4, mood: 4 }, bond: { fang: 8 }, flags: { fangNutri: 1 } },
+        { bond: { fang: -2 } },
+      ] },
+    // Corey：外出時的威脅（請了活動保鑣或貼身保全就不會發生）
+    { id: 'fan_frenzy', phase: 'any', weight: 5, threat: 'public', cond: (s) => adult(s) && s.stats.fame >= 45,
+      choices: [
+        { roll: { chance: 0.5,
+          success: { effects: { fame: 3, mood: 4, health: -2 } },
+          fail: { effects: { health: -8, mood: -6 } } } },
+        { effects: { fame: -2, mood: -2 } },
+        { cond: (s) => met('corey')(s) && bond(s, 'corey') >= 40, hideLocked: true, effects: { fame: 2, mood: 3 }, bond: { corey: 4 } },
+      ] },
+    { id: 'paparazzi', phase: 'any', weight: 4, threat: 'public', cond: (s) => adult(s) && s.stats.fame >= 50,
+      choices: [
+        { roll: { chance: (s) => AW.clamp(s.stats.social / 100, 0.2, 0.85),
+          success: { effects: { fame: 3, mood: 2 } },
+          fail: { effects: { fame: -4, mood: -6, love: -5 } } } },
+        { effects: { mood: -8, health: -3 } },
+        { cond: (s) => met('corey')(s) && bond(s, 'corey') >= 40, hideLocked: true, effects: { mood: 2 }, bond: { corey: 4 } },
+      ] },
+    // Corey：居家威脅（只有貼身保全擋得住）
+    { id: 'extortion', phase: 'any', weight: 4, threat: 'home', cond: (s) => s.age >= 25 && s.stats.money >= 20000000,
+      vars: (s) => ({ 金額: AW.fmtMoney(extortAmount(s)) }),
+      choices: [
+        { effects: (s) => ({ money: -extortAmount(s), mood: -8 }) },
+        { roll: { chance: 0.6,
+          success: { effects: { mood: 4, fame: 2 } },
+          fail: { effects: (s) => ({ money: -extortAmount(s) * 2, mood: -15, health: -5 }) } } },
+        { cond: (s) => met('corey')(s) && bond(s, 'corey') >= 40, hideLocked: true, effects: { mood: 3 }, bond: { corey: 6 } },
+      ] },
+    // 地下錢莊上門討債（借過地下錢莊才會發生；貼身保全擋得住）
+    { id: 'shark_thugs', phase: 'any', weight: 15, threat: 'home', cond: (s) => AW.Finance.sharks(s) > 0,
+      choices: [
+        { cond: (s) => s.stats.money >= AW.Finance.loanLeft(s, 'shark'), effects: (s) => ({ money: -AW.Finance.loanLeft(s, 'shark'), mood: 4 }),
+          run: (s) => { AW.Finance.dropLoans(s, 'shark'); } },
+        { effects: { health: -10, mood: -10 } },
+        { cond: (s) => met('corey')(s) && bond(s, 'corey') >= 40, hideLocked: true, effects: { mood: 3 }, bond: { corey: 5 } },
+      ] },
+    // Corey 開保全公司：投資成功後，創業從商可以和他合開保全公司
+    { id: 'corey_company', phase: 'any', once: true, weight: 6, cond: (s) => s.age >= 32 && met('corey')(s) && bond(s, 'corey') >= 30,
+      choices: [
+        { cond: (s) => s.stats.money >= 1000000,
+          roll: { chance: 0.6,
+            success: { effects: { money: 1000000, mood: 8 }, bond: { corey: 10 }, flags: { coreyCo: 1 } },
+            fail: { effects: { money: -1000000, mood: -5 }, bond: { corey: 5 } } } },
+        { effects: { mood: 4 }, bond: { corey: 4 }, flags: { coreyCo: 1 } },
+      ] },
+
+    // 發哥：人緣很好的專業繪師，FPS 開黑夥伴（行動「請發哥宣傳」）
+    { id: 'fa_portrait', phase: 'any', once: true, weight: 6, cond: (s) => s.age >= 14 && met('fa')(s),
+      variant: (s) => (s.phase === 'esports' || (s.phase === 'second' && s.second.job === 'streamer') ? 'pro' : 'normal'),
+      effects: (s) => ({ mood: 5, fame: s.phase === 'esports' || s.phase === 'second' ? 4 : 1 }), bond: { fa: 4 } },
+    // 發哥揪的聚會：介紹一位還不認識的朋友
+    { id: 'fa_party', phase: 'any', weight: 4, cond: (s) => s.age >= 16 && met('fa')(s) && AW.NPC.unmet(s).length > 0,
+      effects: { mood: 5, social: 2 },
+      run: (s) => ({ text: AW.NPC.meet(s, AW.pick(AW.NPC.unmet(s)), s.age >= 18 ? 'intro_adult' : 'intro'), bonds: [{ id: 'fa', v: AW.NPC.addBond(s, 'fa', 3) }] }) },
+    { id: 'fa_deadline', phase: 'any', weight: 4, cond: (s) => s.age >= 20 && met('fa')(s),
+      choices: [
+        { effects: { health: -3, mood: 2 }, bond: { fa: 6 } },
+        { effects: { mood: 1 }, bond: { fa: 2 } },
+      ] },
+    { id: 'fa_con', phase: 'any', weight: 4, cond: (s) => s.age >= 16 && s.age < 60 && met('fa')(s),
+      choices: [
+        { effects: { health: -2, social: 3, money: 10000, mood: 3 }, bond: { fa: 6 } },
+        { cond: (s) => s.stats.money >= 3000, effects: { money: -3000, mood: 5 }, bond: { fa: 2 } },
+      ] },
+    { id: 'fa_ai', phase: 'any', once: true, weight: 5, cond: (s) => s.age >= 25 && met('fa')(s) && bond(s, 'fa') >= 30,
+      choices: [
+        { cond: (s) => s.stats.money >= 100000, effects: { money: -100000, mood: 4 }, bond: { fa: 10 }, flags: { faArt: 1 } },
+        { roll: { chance: (s) => AW.clamp(0.3 + s.stats.social / 150, 0.3, 0.85),
+          success: { effects: { mood: 4, tech: 1 }, bond: { fa: 6 } },
+          fail: { effects: { mood: -3 }, bond: { fa: -6 } } } },
+      ] },
 
     // ======================= 職場（v1.2） =======================
     { id: 'office_peer', phase: 'engineer', weight: 6, cond: (s) => s.eng.stage === 'job' && s.flags.peerBeat,

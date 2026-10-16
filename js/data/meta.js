@@ -95,6 +95,9 @@
     { id: 'life_winner', check: (s) => s.ending && s.ending.id === 'legend' },
     // v2.1
     { id: 'centi_billionaire', check: (s) => s.fin && AW.Finance.netWorth(s) >= 10000000000 },
+    // v2.3
+    { id: 'ace_king', check: (s) => s.esports && (s.esports.aces || 0) >= 10 },
+    { id: 'late_bloomer', check: (s) => s.flags.lateBloomer },
     { id: 'all_endings' },
   ];
 

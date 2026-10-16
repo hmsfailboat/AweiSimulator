@@ -406,6 +406,10 @@ em.down { color: var(--bad); }
 .tabs.styles .tab small { font-size: .72rem; }
 .tab:disabled { opacity: .5; cursor: not-allowed; }
 .bets.left { justify-content: flex-start; margin-top: .3em; }
+.bets.left .muted { align-self: center; }
+.bet.sell { color: #9fd8ff; border-color: #2a4a6a; }
+.bet.sell.all { color: #ffb3c1; border-color: #7a2a3a; }
+.game-desc { margin-top: .6em; white-space: pre-line; }
 .inv-val { display: flex; flex-direction: column; align-items: flex-end; gap: .3em; }
 .gold { color: var(--gold); }
 .match.rival { background: #2a1520; border-left-color: var(--accent2); }

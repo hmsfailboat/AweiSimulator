@@ -59,6 +59,8 @@
 
     // 年末：好友度自然下降、依人緣擲骰認識新朋友（每年最多一位）
     yearEnd(s) {
+      // 雇用條件不再成立（例如名氣掉到 40 以下，活動保鑣就不幹了）
+      this.checkStaff(s);
       // 人緣高、或上了年紀（老朋友不會輕易斷了聯絡），好友度下降較慢
       const keep = s.stats.social >= B().socialKeep || s.age >= B().oldAge;
       for (const id of this.metList(s)) {
@@ -70,7 +72,9 @@
         this.addBond(s, id, -(keep ? B().decaySocial : B().decay));
       }
       // 人緣越高越容易認識；出社會後比較難交到新朋友
-      const mult = (B().meetBase + s.stats.social / B().meetSocial) * (s.age >= 18 ? B().adultMult : 1);
+      // 發哥人緣好，會幫你介紹朋友
+      const mult = (B().meetBase + s.stats.social / B().meetSocial) * (s.age >= 18 ? B().adultMult : 1)
+        * (this.bond(s, 'fa') >= B().faIntro ? B().faMeet : 1);
       for (const id of AW.shuffle(this.unmet(s))) {
         const d = AW.NPCS[id];
         if (s.age < d.minAge) continue;
@@ -91,15 +95,18 @@
       if (!this.met(s, st.npc)) return { ok: false, hidden: true };
       if (!AW.Shop.open(s)) return { ok: false, reason: '現在不能處理' };
       if (this.bond(s, st.npc) < st.bond) return { ok: false, reason: `好友度需要 ${st.bond}` };
-      if (!st.need(s)) return { ok: false, reason: AW.tx('npc.' + st.npc, 'hire_need') };
+      if (!st.need(s)) return { ok: false, reason: AW.tx('staff.' + job, 'need') };
       return { ok: true };
     },
     hire(s, job) {
       if (!this.hireState(s, job).ok) return false;
+      const st = AW.STAFF[job];
       s.staff = s.staff || {};
+      // 升級：私人廚師取代營養便當、貼身保全取代活動保鑣
+      if (st.replaces) delete s.staff[st.replaces];
       s.staff[job] = 1;
-      this.addBond(s, AW.STAFF[job].npc, 10);
-      AW.Engine.addLog(s, this.icon(AW.STAFF[job].npc), AW.tx('npc.' + AW.STAFF[job].npc, 'hire_log', s));
+      this.addBond(s, st.npc, 10);
+      AW.Engine.addLog(s, this.icon(st.npc), AW.tx('staff.' + job, 'hire_log', s));
       AW.Engine.checkAchievements(s);
       AW.Save.save(s);
       return true;
@@ -107,10 +114,24 @@
     fire(s, job) {
       if (!s.staff || !s.staff[job]) return false;
       delete s.staff[job];
-      AW.Engine.addLog(s, this.icon(AW.STAFF[job].npc), AW.tx('npc.' + AW.STAFF[job].npc, 'fire_log', s));
+      AW.Engine.addLog(s, this.icon(AW.STAFF[job].npc), AW.tx('staff.' + job, 'fire_log', s));
       AW.Save.save(s);
       return true;
     },
+    // 威脅事件會不會被保全擋掉（threat: true 視為居家威脅）
+    guarded(s, threat) {
+      const jobs = AW.THREAT_GUARDS[threat === true ? 'home' : threat] || [];
+      return jobs.some((job) => s.staff && s.staff[job]);
+    },
+    // 阿方的健康餐：私人廚師或營養便當的效果設定（沒有的話是 null）
+    mealPlan(s) {
+      const M = AW.FANG_CARE.meal;
+      return !s.staff ? null : s.staff.chef ? M.chef : s.staff.bento ? M.bento : null;
+    },
+    // 戰隊營養師：職業選手時期，阿方好友度夠高
+    nutritionist(s) { return s.phase === 'esports' && !!s.flags.fangNutri && this.bond(s, 'fang') >= AW.FANG_CARE.nutriBond; },
+    // 健康消耗減免（core.js 的 applyEffects）
+    drainBonus(s, key) { return key === 'health' && this.nutritionist(s) ? AW.FANG_CARE.nutriDrain : 0; },
     // 雇用條件不再成立（例如賣掉房子）時自動解雇
     checkStaff(s) {
       for (const job of Object.keys(s.staff || {})) if (!AW.STAFF[job].need(s)) this.fire(s, job);

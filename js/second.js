@@ -30,6 +30,8 @@
   const THEMES = {
     academy: { stat: 'fame' }, cafe: { stat: 'fame' }, consult: { stat: 'tech' },
     restaurant: { stat: 'social', partner: 'fang' }, breakfast: { stat: 'social', partner: 'cat' },
+    // Corey 開了保全公司之後才能合開（事件「Corey 開保全公司」）
+    security: { stat: 'leader', partner: 'corey', need: (s) => !!s.flags.coreyCo },
   };
   const STREAM = { startFame: 5000, startSocial: 1000, churn: 0.85, perWin: 0.12, flat: 8000, goal: 1000000, income: 1.5, base: 29, perDigit: 8 };
   // 教練：隊伍戰力 = tactics × 戰術 + roster ×（隊友實力 + 加成）- penalty；加成上限、每年衰退；奪冠後被挖角的機率
@@ -43,6 +45,10 @@
   const WISH_COUNT = 5;
   // 接班人：退休賣股份時，公司價值倍率
   const HEIR_VALUE = 1.5;
+  // 離開自己的公司時處理股份：sell 一次賣掉 = 年度分紅 × sell；keep 保留股份，每年領年度分紅 × keep
+  // 保留的股份每年隨公司表現漲跌（平均 drift、標準差 sd），最多 max 倍、最少 min 倍
+  // 科技公司大老闆（執行長或 IPO 創辦人）沒有轉任董事長時，以董事長第一階段的分紅計算
+  const SHARES = { sell: 5, keep: 0.6, drift: 0.02, sd: 0.12, max: 3, min: 0.3 };
 
   // 年度議題（v2.1）：董事長、企業家每年抽一個議題，在行動階段選擇方針
   // 選項：b 經營實力加減；up 幾季達標就成長（預設 3）；grow: false 今年不擴張（2 季以上達標算「穩健」）
@@ -108,7 +114,7 @@
       const cur = reason === 'switch' && s.phase === 'second' ? s.second.job : null;
       // 這輩子已經完成的職涯章節，不能再選同一條路
       const done = (id) => AW.Engine.hasChapter(s, id);
-      if (reason === 'world_champ' && s.phase === 'esports' && s.age < 32) {
+      if (reason === 'world_champ' && s.phase === 'esports' && s.age < AW.Esports.retireAge(s)) {
         opts.push({ label: tx('opt_defend'), desc: tx('opt_defend_desc'), apply: () => ({ text: tx('msg_defend') }) });
       }
       if (reason === 'tech_boss' && !done('tycoon')) {
@@ -134,8 +140,9 @@
     },
 
     pickTheme(s) {
-      const partners = ['fang', 'cat'].filter((id) => AW.NPC.bond(s, id) >= 50).sort((a, b) => AW.NPC.bond(s, b) - AW.NPC.bond(s, a));
-      if (partners.length) return partners[0] === 'fang' ? 'restaurant' : 'breakfast';
+      // 好友度 50 以上的合夥朋友，選好友度最高的那位
+      const themes = Object.keys(THEMES).filter((t) => THEMES[t].partner && AW.NPC.bond(s, THEMES[t].partner) >= 50 && (!THEMES[t].need || THEMES[t].need(s)));
+      if (themes.length) return themes.sort((a, b) => AW.NPC.bond(s, THEMES[b].partner) - AW.NPC.bond(s, THEMES[a].partner))[0];
       if (s.esports) return s.stats.fame >= 50 ? 'academy' : 'cafe';
       return 'consult';
     },
@@ -145,6 +152,9 @@
     start(s, job, opt) {
       opt = opt || {};
       const prev = s.phase === 'second' ? s.second : null;
+      // 離開自己經營的公司：之後要決定股份怎麼處理
+      const left = prev && (prev.job === 'biz' || prev.job === 'chairman') ? this.companyInfo(s)
+        : s.phase === 'engineer' && job !== 'chairman' && AW.Engine.hasChapter(s, 'tech_boss') ? this.companyInfo(s) : null;
       s.phase = 'second';
       const g = { job, since: s.age };
       if (job === 'streamer') {
@@ -184,6 +194,7 @@
       let text = AW.tx('second', 'start_' + job, s, { 公司: g.name || '', 戰隊: g.team || '', 主題: g.theme ? AW.tx('second', 'theme_' + g.theme, s) : '' });
       if (g.support && g.support.text) { text += ' ' + g.support.text; delete g.support; }
       this.ensureWishes(s);
+      if (left) s.decision = this.sharesDecision(s, left);
       return { text };
     },
 
@@ -191,25 +202,71 @@
       const g = s.second;
       // 到了退休年齡（65 歲，企業家、董事長 70 歲）：工作告一段落，進入晚年
       if (s.age >= ELDER_AGE && g.job !== 'retired' && !this.working(s)) {
-        if (g.job === 'biz' || g.job === 'chairman') {
-          const v = this.companyValue(s);
-          if (v) AW.applyEffects(s, { money: v });
-          AW.Engine.note(s, '🤝', AW.tx('second', g.heir ? 'msg_sell_heir' : 'msg_sell', s, { 公司: g.name, 金額: AW.fmtMoney(v) }));
-        }
+        const info = g.job === 'biz' || g.job === 'chairman' ? this.companyInfo(s) : null;
         AW.Engine.note(s, '🧓', AW.tx('second', 'msg_elder', s));
         s.second = { job: 'retired', since: s.age, was: g.job };
+        // 企業家、董事長退休：決定股份要賣掉還是保留
+        if (info) {
+          s.decision = this.sharesDecision(s, info);
+          s.step = 'decision';
+        }
       }
       this.ensureWishes(s);
     },
 
-    // 退休或 65 歲時把公司股份賣掉
-    companyValue(s) {
+    // 目前經營的公司：{ name, div 年度分紅, heir 有接班人 }
+    companyInfo(s) {
       const g = s.second;
-      const heir = g.heir ? HEIR_VALUE : 1;
-      if (g.job === 'biz') return BIZ_STAGES[g.stage].dividend * 5 * heir;
-      if (g.job === 'chairman') return CHAIR_STAGES[g.stage].dividend * 5 * heir;
-      return 0;
+      if (s.phase === 'second' && g && (g.job === 'biz' || g.job === 'chairman')) {
+        const div = (g.job === 'biz' ? BIZ_STAGES : CHAIR_STAGES)[g.stage].dividend * (g.heir ? HEIR_VALUE : 1);
+        return { name: g.name, div, heir: !!g.heir };
+      }
+      if (s.eng) return { name: s.eng.startup >= 5 ? s.eng.startupName : s.eng.companyName, div: CHAIR_STAGES[0].dividend, heir: false };
+      return null;
     },
+    // 被趕下台時把股份賣掉
+    companyValue(s) {
+      const info = this.companyInfo(s);
+      return info ? info.div * SHARES.sell : 0;
+    },
+
+    // ---------- 股份（v2.3）：離開自己的公司時，一次賣掉或保留股份每年領分紅 ----------
+    sharesDecision(s, info) {
+      const tx = (k) => AW.tx('second', k, s, { 公司: info.name, 金額: AW.fmtMoney(info.div * SHARES.sell), 分紅: AW.fmtMoney(info.div * SHARES.keep) });
+      return { type: 'shares', icon: '📜', title: tx('shares_title'), text: tx(info.heir ? 'shares_text_heir' : 'shares_text'),
+        options: [
+          { label: tx('shares_sell'), desc: tx('shares_sell_desc'), apply: (st) => {
+            AW.applyEffects(st, { money: info.div * SHARES.sell });
+            return { text: tx('msg_shares_sell') };
+          } },
+          { label: tx('shares_keep'), desc: tx('shares_keep_desc'), apply: (st) => {
+            st.holdings.push({ name: info.name, div: Math.round(info.div * SHARES.keep), base: Math.round(info.div * SHARES.keep), since: st.age });
+            return { text: tx('msg_shares_keep') };
+          } },
+        ] };
+    },
+    // 每年的股利（公司表現隨機漲跌），計入年度所得
+    holdingsYear(s) {
+      let total = 0;
+      for (const h of s.holdings) {
+        const r = SHARES.drift + SHARES.sd * AW.randNormal();
+        h.div = Math.round(AW.clamp(h.div * (1 + r), h.base * SHARES.min, h.base * SHARES.max));
+        total += h.div;
+      }
+      return total;
+    },
+    // 賣掉保留的股份（理財畫面）：以目前股利 × SHARES.sell 計價
+    sellHolding(s, i) {
+      const h = s.holdings[i];
+      if (!h) return false;
+      const v = h.div * SHARES.sell;
+      s.holdings.splice(i, 1);
+      AW.applyEffects(s, { money: v });
+      AW.Engine.addLog(s, '🤝', AW.tx('second', 'msg_shares_sell_later', s, { 公司: h.name, 金額: AW.fmtMoney(v) }));
+      AW.Save.save(s);
+      return true;
+    },
+    holdingValue(h) { return h.div * SHARES.sell; },
 
     // ---------- 年度議題（v2.1） ----------
     beginYear(s) {

@@ -29,9 +29,30 @@
   // 宿敵王選手：能力成長、戰隊等級門檻、季後賽遇到的機率
   const RIVAL = { growUntil: 26, declineFrom: 29, tierSkill: [58, 68, 78, 85], meetPlayoff: 0.6, slayFinals: 1, friendsH2H: 8 };
   const WORLDS = { groups: [73, 75, 77], ko: [{ name: '八強賽', opp: 78, bo: 3 }, { name: '四強賽', opp: 81, bo: 5 }, { name: '總決賽', opp: 83, bo: 5 }] };
+  const WORLD_PRIZE = [0, 300000, 1000000, 3000000, 6000000, 15000000];
+
+  // 兩種遊戲的差異（說明文字在 texts.js 的 [esports]）
+  // w: 個人戰力權重；k: 勝率曲線（越大越容易爆冷）；retire: 強制退役年齡
+  // reflexFrom／mainFrom: 反應力、主遊戲能力開始衰退的年齡；fame: 名氣倍率；worlds: 世界賽獎金倍率；transfer: 轉會邀約機率加成
+  // FPS：個人明星、早熟早退，贏下系列賽有機會打出 ACE；DOTA：團隊與戰術、大器晚成，每年有版本、世界賽獎池大
+  const GAMES = {
+    fps: { w: { main: 0.5, reflex: 0.35, teamwork: 0.1, tactics: 0, mood: 0.05 }, k: 7, retire: 31,
+      reflexFrom: 25, mainFrom: 28, fame: 1.25, worlds: 1, transfer: 0.05 },
+    dota: { w: { main: 0.5, reflex: 0.1, teamwork: 0.15, tactics: 0.15, mood: 0.1 }, k: 5, retire: 34,
+      reflexFrom: 28, mainFrom: 31, fame: 1, worlds: 2.5, transfer: 0 },
+  };
+  // FPS 的 ACE：BO3 以上的系列賽每贏一場擲一次；反應力越高、練了「瞄準特訓」、打狙擊位機率越高
+  const ACE = { base: 0.08, reflex: 0.004, aim: 0.08, awper: 0.06, max: 0.45, fame: 2 };
+  // FPS 年度 MVP：例行賽至少 wins 勝、個人戰力比隊友實力高 gap 以上；年薪多 bonus
+  const MVP = { wins: 6, gap: 6, fame: 6, bonus: 0.3 };
+  // DOTA 的版本：每年隨機一個，契合度 min～max；練「BP 研究」至少 +draft
+  const METAS = ['push', 'late', 'fight', 'gank', 'split'];
+  const META = { min: -2, max: 2, draft: 3 };
 
   const Esports = (AW.Esports = {
-    TIERS,
+    TIERS, GAMES,
+    game(s) { return GAMES[(s.esports && s.esports.game) || 'fps']; },
+    retireAge(s) { return this.game(s).retire; },
     teamName(tier, exclude) {
       const pool = TEAM_NAMES[tier].filter((n) => n !== exclude);
       return AW.pick(pool);
@@ -41,10 +62,24 @@
       if (game !== 'fps' && game !== 'dota') game = AW.resolveKey(s, 'best');
       const tier = s.stats[game] >= 72 || s.flags.scouted ? 1 : 0;
       s.esports = { game, tier, team: this.teamName(tier), seasons: 0, domesticTitles: 0, minorTitles: 0,
-        worldTitles: 0, bestWorlds: 0, history: [], maxTier: tier };
+        worldTitles: 0, bestWorlds: 0, history: [], maxTier: tier, aces: 0, mvps: 0 };
       s.stats.teamwork = Math.max(s.stats.teamwork, Math.round(s.stats.social * 0.5));
+      this.startTactics(s);
       s.fin.style = 0; // 新秀薪水低，先過小資生活
       this.startRival(s);
+    },
+
+    // DOTA 吃戰術：遊戲理解、學力、人緣好的人一出道就比較會看局勢
+    startTactics(s) {
+      if (s.esports.game !== 'dota') return;
+      s.stats.tactics = Math.max(s.stats.tactics || 0, Math.round(s.stats.dota * 0.45 + s.stats.study * 0.3 + s.stats.social * 0.15));
+    },
+    // v2.2 以前的存檔：補上 ACE、MVP 次數；DOTA 選手補上戰術
+    migrate(s) {
+      if (!s.esports || s.esports.aces != null) return;
+      s.esports.aces = 0;
+      s.esports.mvps = 0;
+      if (s.phase === 'esports') this.startTactics(s);
     },
 
     // ---------- 宿敵：王選手 ----------
@@ -91,14 +126,38 @@
     mainStat(s) { return s.stats[s.esports.game]; },
     power(s) {
       const st = s.stats;
-      return 0.5 * this.mainStat(s) + 0.25 * st.reflex + 0.15 * st.teamwork + 0.1 * st.mood - (s.yearFlags.lag ? 4 : 0)
-        - (st.health < AW.TIER.low ? 3 : 0) + AW.Love.esportsPower(s);
+      const w = this.game(s).w;
+      return w.main * this.mainStat(s) + w.reflex * st.reflex + w.teamwork * st.teamwork + w.tactics * st.tactics + w.mood * st.mood
+        - (s.yearFlags.lag ? 4 : 0) - (st.health < AW.TIER.low ? (AW.NPC.nutritionist(s) ? AW.FANG_CARE.nutriPenalty : 3) : 0)
+        + AW.Love.esportsPower(s);
     },
-    teamPower(s) { return 0.45 * this.power(s) + 0.55 * TIERS[s.esports.tier].mates; },
-    winProb(T, opp, bonus) { return AW.clamp(1 / (1 + Math.exp(-(T - opp) / 6)) + (bonus || 0), 0.02, 0.98); },
+    teamPower(s) { return 0.45 * this.power(s) + 0.55 * TIERS[s.esports.tier].mates + (s.yearFlags.metaFit || 0); },
+    winProb(T, opp, bonus, k) { return AW.clamp(1 / (1 + Math.exp(-(T - opp) / (k || 6))) + (bonus || 0), 0.02, 0.98); },
 
-    series(T, opp, bo, bonus, oppName) {
-      const p = this.winProb(T, opp + AW.randInt(-2, 2), bonus);
+    // DOTA：今年的版本與契合度（每年開始時決定，記在 yearFlags）
+    rollMeta(s) {
+      if (!s.esports || s.esports.game !== 'dota' || s.yearFlags.meta) return;
+      s.yearFlags.meta = AW.pick(METAS);
+      s.yearFlags.metaFit = AW.randInt(META.min, META.max);
+      // 去年先研究過新版本（事件「大改版」）
+      if (s.yearFlags.metaRead) s.yearFlags.metaFit = Math.max(s.yearFlags.metaFit, META.draft);
+    },
+    metaText(s) {
+      const f = s.yearFlags;
+      if (!f.meta) return '';
+      return AW.tx('esports', 'meta_' + f.meta, s) + `（${f.metaFit >= 0 ? '+' : ''}${f.metaFit}）`;
+    },
+    // 「BP 研究」：版本契合度至少 +META.draft
+    readMeta(s) {
+      this.rollMeta(s);
+      s.yearFlags.metaFit = Math.max(s.yearFlags.metaFit || 0, META.draft);
+    },
+    aceChance(s) {
+      return AW.clamp(ACE.base + (s.stats.reflex - 50) * ACE.reflex + (s.yearFlags.aim ? ACE.aim : 0) + (s.flags.awper ? ACE.awper : 0), 0.02, ACE.max);
+    },
+
+    series(T, opp, bo, bonus, oppName, k) {
+      const p = this.winProb(T, opp + AW.randInt(-2, 2), bonus, k);
       const need = Math.ceil(bo / 2);
       const games = [];
       let w = 0, l = 0;
@@ -116,21 +175,30 @@
       const tier = TIERS[e.tier];
       const lg = LEAGUES[tier.league];
       const T = e.T;
+      const k = this.game(s).k;
+      // 選手本人上場時（教練模式不算），FPS 贏下 BO3 以上的系列賽有機會打出 ACE
+      const aceP = !o && s.esports.game === 'fps' ? this.aceChance(s) : 0;
+      const series = (T2, opp, bo, bonus, name) => {
+        const m = this.series(T2, opp, bo, bonus, name, k);
+        if (aceP && m.won && bo > 1 && AW.chance(aceP)) { m.tag = AW.tx('esports', 'ace_tag', s); m.ace = 1; }
+        return m;
+      };
       // 大心臟天賦；好感度 70 以上，另一半會到季後賽、世界賽現場應援
       const clutch = (AW.traitOf(s).clutch || 0) + AW.Love.cheerClutch(s);
-      const season = { kind: 'esports', title: AW.tx('rival', 'season_title', s), pill: `隊伍戰力 ${Math.round(T)}`,
+      const meta = this.metaText(s);
+      const season = { kind: 'esports', title: AW.tx('rival', 'season_title', s), pill: `隊伍戰力 ${Math.round(T)}${meta ? '・' + meta : ''}`,
         T: Math.round(T), league: tier.league, stages: [], leagueWins: 0, summary: [], worldsReach: 0,
         playoffWins: 0, champion: false, finalist: false };
 
       // 聯賽
       const opps = AW.shuffle(DOMESTIC_OPP).slice(0, 7);
-      const lgMatches = opps.map((n) => this.series(T, lg.league + AW.randInt(-7, 7), 1, 0, n));
+      const lgMatches = opps.map((n) => series(T, lg.league + AW.randInt(-7, 7), 1, 0, n));
       // 宿敵在同一級聯賽：例行賽一定會碰到，季後賽也可能碰頭
       const rival = s.rival && TIERS[s.rival.tier].league === tier.league && s.rival.team !== e.team ? s.rival : null;
       const R = rival ? this.rivalTeamPower(s) : 0;
       if (rival) {
         const i = AW.randInt(0, 6);
-        lgMatches[i] = Object.assign(this.series(T, Math.round(R), 1, 0, this.rivalName(s)), { rival: true });
+        lgMatches[i] = Object.assign(series(T, Math.round(R), 1, 0, this.rivalName(s)), { rival: true });
       }
       season.leagueWins = lgMatches.filter((m) => m.won).length;
       const lgPass = season.leagueWins >= 4;
@@ -149,7 +217,7 @@
       for (let i = 0; i < 3 && alive; i++) {
         const isRival = i === rivalRound;
         const opp = isRival ? Math.max(Math.round(R), lg.playoffs[i] - 4) : lg.playoffs[i];
-        const m = this.series(T, opp, i === 2 ? 5 : 3, clutch, isRival ? this.rivalName(s) : poOpps[i]);
+        const m = series(T, opp, i === 2 ? 5 : 3, clutch, isRival ? this.rivalName(s) : poOpps[i]);
         if (isRival) m.rival = true;
         m.round = roundNames[i];
         poMatches.push(m);
@@ -164,7 +232,7 @@
       // 世界賽：職業聯賽冠軍、亞軍晉級
       if (tier.league !== 'major' || !season.finalist) return season;
       const wOpps = AW.shuffle(WORLD_OPP);
-      const groups = WORLDS.groups.map((o, i) => this.series(T, o, 1, clutch, wOpps[i]));
+      const groups = WORLDS.groups.map((opp, i) => series(T, opp, 1, clutch, wOpps[i]));
       const gw = groups.filter((m) => m.won).length;
       season.worldsReach = 1;
       season.stages.push({ name: '世界賽・小組賽', icon: '🌍', matches: groups, passed: gw >= 2,
@@ -173,7 +241,7 @@
       const ko = [];
       for (let i = 0; i < WORLDS.ko.length; i++) {
         const r = WORLDS.ko[i];
-        const m = this.series(T, r.opp, r.bo, clutch, wOpps[3 + i]);
+        const m = series(T, r.opp, r.bo, clutch, wOpps[3 + i]);
         m.round = r.name;
         ko.push(m);
         season.worldsReach = 2 + i + (m.won ? 1 : 0);
@@ -194,28 +262,48 @@
       const lg = LEAGUES[tier.league];
       e.seasons += 1;
 
+      const G = this.game(s);
       // 名氣、獎金
       let fame = season.leagueWins * lg.fameMult + season.playoffWins * 2 * lg.fameMult;
       let prize = 0;
+      let salary = tier.salary;
       if (season.champion) {
         if (tier.league === 'major') { e.domesticTitles += 1; fame += 12; prize += 1000000; }
         else { e.minorTitles += 1; fame += 6; prize += 200000; }
       }
       if (season.worldsReach) {
         fame += 6 + (season.worldsReach - 1) * 5;
-        prize += [0, 300000, 1000000, 3000000, 6000000, 15000000][season.worldsReach];
+        prize += Math.round(WORLD_PRIZE[season.worldsReach] * G.worlds);
         e.bestWorlds = Math.max(e.bestWorlds, season.worldsReach);
       }
-      if (season.worldChampion) { e.worldTitles += 1; fame += 25; }
+      if (season.worldChampion) {
+        e.worldTitles += 1;
+        fame += 25;
+        if (e.game === 'dota' && s.age >= 30) s.flags.lateBloomer = 1;
+      }
       if (!season.leagueWins) fame -= 3;
+      // FPS：ACE、年度 MVP
+      const aces = season.stages.reduce((n, st) => n + st.matches.filter((m) => m.ace).length, 0);
+      if (aces) {
+        e.aces = (e.aces || 0) + aces;
+        fame += aces * ACE.fame;
+        AW.Engine.note(s, '💥', AW.tx('esports', 'msg_ace', s, { 次數: aces, 生涯: e.aces }));
+      }
+      if (e.game === 'fps' && season.leagueWins >= MVP.wins && this.power(s) - tier.mates >= MVP.gap) {
+        e.mvps = (e.mvps || 0) + 1;
+        fame += MVP.fame;
+        salary = Math.round(salary * (1 + MVP.bonus));
+        AW.Engine.note(s, '🌟', AW.tx('esports', 'msg_mvp', s, { 獎金: AW.fmtMoney(salary - tier.salary) }));
+      }
+      if (fame > 0) fame *= G.fame;
       AW.applyEffects(s, { fame: Math.round(fame) });
-      AW.Finance.earn(s, prize + tier.salary);
+      AW.Finance.earn(s, prize + salary);
       this.rivalResults(s, season);
       if (season.leagueWins <= 2) AW.applyEffects(s, { mood: -6 });
       if (season.champion) AW.applyEffects(s, { mood: 12, teamwork: 3 });
       e.history.push({ age: s.age, team: e.team, tier: e.tier, summary: season.summary.join(' → ') });
       AW.Engine.note(s, season.worldChampion ? '🏆' : season.champion ? '🥇' : '📊',
-        `${e.team}：${season.summary.join(' → ')}（獎金+年薪 ${AW.fmtMoney(prize + tier.salary)}）`);
+        `${e.team}：${season.summary.join(' → ')}（獎金+年薪 ${AW.fmtMoney(prize + salary)}）`);
 
       // 老化
       this.aging(s);
@@ -225,9 +313,9 @@
         if (!AW.Engine.hasChapter(s, 'world_champ')) { s.pendingEnding = 'world_champ'; return; }
         AW.Engine.note(s, '👑', AW.tx('rival', 'msg_defend', s));
       }
-      if (s.age >= 32) {
+      if (s.age >= G.retire) {
         s.pendingEnding = this.endingFor(s);
-        AW.Engine.note(s, '👋', '32 歲，是時候退役了。');
+        AW.Engine.note(s, '👋', AW.tx('esports', 'msg_retire_' + e.game, s, { 年齡: s.age }));
         return;
       }
       this.offseason(s, season);
@@ -249,14 +337,15 @@
     },
 
     aging(s) {
-      const start = 26 + (AW.traitOf(s).reflexDelay || 0);
+      const G = this.game(s);
+      const start = G.reflexFrom + (AW.traitOf(s).reflexDelay || 0);
       if (s.age >= start) {
         let d = AW.randInt(2, 4);
         if (s.yearFlags.gym) d = Math.ceil(d / 2);
         AW.applyEffects(s, { reflex: -d });
         AW.Engine.note(s, '⏳', `年紀漸長，反應力 -${d}${s.yearFlags.gym ? '（健身減緩）' : ''}`);
       }
-      if (s.age >= 29) AW.applyEffects(s, { main: -AW.randInt(1, 2) });
+      if (s.age >= G.mainFrom) AW.applyEffects(s, { main: -AW.randInt(1, 2) });
     },
 
     offseason(s, season) {
@@ -275,7 +364,7 @@
       // 轉會邀約
       let offer = -1;
       for (let t = 4; t > e.tier; t--) {
-        let c = 0.1 + (P - TIERS[t].req) * 0.06 + s.stats.fame * 0.004 + (season.champion ? 0.25 : 0) - (t - e.tier - 1) * 0.3;
+        let c = 0.1 + this.game(s).transfer + (P - TIERS[t].req) * 0.06 + s.stats.fame * 0.004 + (season.champion ? 0.25 : 0) - (t - e.tier - 1) * 0.3;
         if (season.champion && TIERS[e.tier].league === 'minor' && t === 2) c = 1;
         if (AW.chance(AW.clamp(c, 0, 0.95))) { offer = t; break; }
       }

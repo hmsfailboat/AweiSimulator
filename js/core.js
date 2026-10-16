@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const AW = (root.AW = root.AW || {});
-  AW.VERSION = '2.2'; // 發布新版時同步更新 CHANGELOG.md
+  AW.VERSION = '2.3'; // 發布新版時同步更新 CHANGELOG.md
 
   // ---------- 隨機數（mulberry32，可存檔重現） ----------
   AW.rng = {
@@ -125,8 +125,12 @@
   AW.RECOVER_KEYS = ['health', 'mood'];
   AW.RECOVER_SPAN = 50;
   AW.DRAIN_CAP = 0.5;
-  // 健康上限：35 歲後每 2 歲 -1
-  AW.condMax = (s, key) => (key === 'health' ? 100 - Math.max(0, Math.floor((s.age - 35) / 2)) : 100);
+  // 健康上限：35 歲後每 2 歲 -1（請阿方當私人廚師每 2.5 歲 -1）
+  AW.condMax = (s, key) => {
+    if (key !== 'health') return 100;
+    const meal = AW.NPC && AW.NPC.mealPlan(s);
+    return 100 - Math.max(0, Math.floor((s.age - 35) / (meal ? meal.capStep : 2)));
+  };
 
   AW.DIM = { cap: 120, pow: 1.8 };
   AW.diminish = (v) => Math.pow(Math.max(0.02, 1 - v / AW.DIM.cap), AW.DIM.pow);
@@ -155,7 +159,8 @@
       } else if (def.kind === 'cond') {
         const cap = AW.condMax(s, key);
         if (v < 0) {
-          const drain = ((trait.drain && trait.drain[key]) || 0) + (AW.Shop ? AW.Shop.bonus(s, 'drain', key) : 0);
+          const drain = ((trait.drain && trait.drain[key]) || 0) + (AW.Shop ? AW.Shop.bonus(s, 'drain', key) : 0)
+            + (AW.NPC ? AW.NPC.drainBonus(s, key) : 0);
           if (drain) v *= 1 - Math.min(drain, AW.DRAIN_CAP);
           v = Math.round(v);
         } else if (AW.RECOVER_KEYS.includes(key)) {
