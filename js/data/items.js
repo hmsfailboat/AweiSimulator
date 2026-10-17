@@ -9,12 +9,16 @@
  * upkeep: 每年維護費；adapt: 享樂適應，yearly 效果每年減半；loan: 房貸 { down 頭期比例, rate 年利率, years 年數 }
  * tolerance: 連續每年購買，效果乘上 tolerance 的次方；sell: 變賣時拿回原價的比例
  * price: 價格（數字或 (s) => 數字）；minAge / maxAge：年齡限制；stages：限定階段；tags: game → 被禁止打電動時不能買
+ * estate: 房地產的基準價，價格與變賣價隨房市漲跌（js/estate.js），sell 是扣掉仲介費、稅之後拿回市值的比例
+ * vars(s): 說明文字的專屬變數
  */
 (function (root) {
   'use strict';
   const AW = root.AW;
 
   AW.CHARM_BONUS = 0.15;
+  // 房子的說明：{總價} 目前的價格（劉地主好友度夠高時已打折）
+  const estateVars = (s, base) => ({ 總價: AW.fmtMoney(AW.Estate.buyPrice(s, base)) });
 
   AW.ITEMS = [
     // ---------------- 裝備 ----------------
@@ -26,12 +30,12 @@
     { id: 'chair', type: 'gear', price: 30000, minAge: 10, drain: { health: 0.15 } },
     { id: 'laptop', type: 'gear', price: 60000, minAge: 15, growth: { tech: 0.12, study: 0.05 } },
     { id: 'suit', type: 'gear', price: 120000, minAge: 18, growth: { leader: 0.06, social: 0.06 } },
-    { id: 'house', type: 'gear', price: 15000000, minAge: 22, loan: { down: 0.2, rate: 0.022, years: 20 }, sell: 0.9,
-      effects: { mood: 10 } },
+    { id: 'house', type: 'gear', estate: 15000000, price: (s) => AW.Estate.buyPrice(s, 15000000), minAge: 22,
+      loan: { down: 0.2, rate: 0.022, years: 20 }, sell: 0.9, effects: { mood: 10 }, vars: (s) => estateVars(s, 15000000) },
     { id: 'car', type: 'gear', price: 8000000, minAge: 20, upkeep: 400000, adapt: true, sell: 0.5,
       effects: { fame: 8, mood: 15 }, yearly: { mood: 4 } },
-    { id: 'mansion', type: 'gear', price: 30000000, minAge: 25, upkeep: 600000, adapt: true, sell: 0.5,
-      effects: { mood: 20 }, yearly: { mood: 6 } },
+    { id: 'mansion', type: 'gear', estate: 30000000, price: (s) => AW.Estate.buyPrice(s, 30000000), minAge: 25, upkeep: 600000, adapt: true,
+      sell: 0.8, effects: { mood: 20 }, yearly: { mood: 6 }, vars: (s) => estateVars(s, 30000000) },
 
     // ---------------- 消耗品 ----------------
     { id: 'supplement', type: 'use', price: 2000, tolerance: 0.6, effects: { health: 5 } },

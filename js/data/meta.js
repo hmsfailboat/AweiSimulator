@@ -98,6 +98,9 @@
     // v2.3
     { id: 'ace_king', check: (s) => s.esports && (s.esports.aces || 0) >= 10 },
     { id: 'late_bloomer', check: (s) => s.flags.lateBloomer },
+    // v2.4
+    { id: 'landlord', check: (s) => s.estate && s.estate.rentals.length >= 3 },
+    { id: 'land_deal', check: (s) => s.flags.liuLand },
     { id: 'all_endings' },
   ];
 

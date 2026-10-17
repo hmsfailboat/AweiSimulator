@@ -20,8 +20,10 @@
     ke: { gamer: false, squad: 0.3, minAge: 12, base: 0.07, likes: ['ke_fight', 'netcafe', 'reflex_train', 'reflex_drill', 'uni_code', 'code'] },
     gao: { gamer: true, minAge: 14, base: 0.08, likes: ['play_fps', 'ranked_night', 'lockdown', 'squad'] },
     fa: { gamer: true, minAge: 12, base: 0.12, likes: GAME_ACTS.concat('friends', 'uni_club', 'networking') },
+    // v2.4：內湖的大地主，不打電動（房地產的好處在 js/estate.js 的 AW.LIU）
+    liu: { gamer: false, minAge: 15, base: 0.07, likes: ['friends', 'uni_club', 'networking', 'parttime', 'vacation'] },
   };
-  AW.NPC_ORDER = ['hu', 'haji', 'wang', 'fang', 'cat', 'corey', 'ke', 'gao', 'fa'];
+  AW.NPC_ORDER = ['hu', 'haji', 'wang', 'fang', 'cat', 'corey', 'ke', 'gao', 'fa', 'liu'];
 
   // 雇用：npc 好友度需達 bond，need(s) 其他條件；yearly 每年效果；replaces 雇用後取代的較低階雇用
   // 按鈕、條件不足的提示、雇用／解雇紀錄在 texts.js 的 [staff.代號]

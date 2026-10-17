@@ -346,7 +346,8 @@ em.down { color: var(--bad); }
 .cas-result.lose .cas-net { color: var(--bad); }
 @keyframes shake { 0%, 100% { transform: none; } 25% { transform: rotate(-6deg) scale(1.1); } 50% { transform: rotate(5deg); } 75% { transform: rotate(-3deg); } }
 .modal-box li { margin-bottom: .4em; }
-#toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: .5em; max-width: calc(100vw - 32px); }
+/* 提醒不攔截點擊，避免擋住下面的按鈕（例如道具商店的「離開」） */
+#toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: .5em; max-width: calc(100vw - 32px); pointer-events: none; }
 .toast { background: var(--card2); border: 1px solid var(--accent); border-radius: 12px; padding: .7em 1em; box-shadow: var(--shadow); animation: slidein .3s ease; transition: opacity .5s, transform .5s; }
 .toast.ach { border-color: var(--gold); }
 .toast.out { opacity: 0; transform: translateX(20px); }
@@ -443,3 +444,14 @@ em.down { color: var(--bad); }
 .transfer-sec { margin-top: 1em; }
 .transfer-sec h4 { margin: 0 0 .4em; }
 .toast.bad { border-color: var(--bad); }
+
+/* ---------- v2.4：視窗底部按鈕、手機版提醒、朋友時間 ---------- */
+/* 內容很長的視窗（道具商店、理財、朋友），關閉按鈕固定在底部 */
+.modal-foot { position: sticky; bottom: 0; margin: 1em -1.3em -1.3em; padding: .7em 1.3em; background: var(--card); border-top: 1px solid var(--line); }
+@media (max-width: 760px) {
+  /* 手機版：提醒改從上方出現，不會蓋住視窗底部的按鈕 */
+  #toasts { top: 12px; bottom: auto; left: 16px; right: 16px; max-width: none; }
+  .toast { animation-name: slidedown; }
+  .toast.out { transform: translateY(-12px); }
+}
+@keyframes slidedown { from { opacity: 0; transform: translateY(-16px); } }

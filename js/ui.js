@@ -71,7 +71,7 @@
       return list.filter((x) => x.v).map((x) => this.chip(x.key, x.v)).join('');
     },
     previewChips(s, a) {
-      let out = this.chips(AW.previewEffects(s, a.effects));
+      let out = this.chips(AW.previewEffects(s, E.actionEffects(s, a)));
       const cost = E.actionCost(s, a);
       if (cost) out += this.chip('money', -cost);
       if (a.perf) out += `<span class="chip info">📈績效+${a.perf}</span>`;
@@ -302,13 +302,14 @@
         <div class="trait-tag" title="${esc(t.desc || '')}">${t.icon || ''} 天賦：${esc(t.name || '無')}</div>`;
     },
 
-    // 面板：投資市值與未實現損益
+    // 面板：投資市值與未實現損益、收租物件
     rInvestLine(s) {
       const F = AW.Finance;
       const v = F.invested(s);
-      if (!v) return '';
       const pl = v - F.investCost(s);
-      return `<div class="muted small" data-act="finance">📈 投資市值 ${AW.fmtMoney(v)} <b class="${pl >= 0 ? 'ok' : 'bad'}">${esc(F.fmtPL(pl))}</b></div>`;
+      const n = s.estate ? s.estate.rentals.length : 0;
+      return (v ? `<div class="muted small" data-act="finance">📈 投資市值 ${AW.fmtMoney(v)} <b class="${pl >= 0 ? 'ok' : 'bad'}">${esc(F.fmtPL(pl))}</b></div>` : '')
+        + (n ? `<div class="muted small" data-act="finance">🏘️ 收租物件 ${n} 間・淨值 ${AW.fmtMoney(AW.Estate.equity(s))}</div>` : '');
     },
 
     rStatus(s) {
@@ -517,8 +518,9 @@
       const u = this.ui;
       u.selected = (u.selected || []).filter((id) => { const a = AW.ACTION_MAP[id]; return a && E.actionState(s, a).ok; });
       const n = E.slots(s);
+      const fn = E.friendSlots(s);
       const list = E.availableActions(s);
-      const cards = list.map(({ a, ok, reason }) => {
+      const card = ({ a, ok, reason }) => {
         const sel = u.selected.includes(a.id);
         return `<button class="action-card ${sel ? 'selected' : ''} ${ok ? '' : 'disabled'}" data-act="toggle" data-id="${a.id}" ${ok ? '' : 'disabled'}>
           <div class="ac-head"><span class="ac-icon">${a.icon}</span><span class="ac-name">${esc(a.name)}</span>${sel ? '<span class="ac-check">✓</span>' : ''}</div>
@@ -526,14 +528,23 @@
           <div class="chips-row">${this.previewChips(s, a)}</div>
           ${ok ? '' : `<div class="ac-lock">🔒 ${esc(reason)}</div>`}
         </button>`;
-      }).join('');
+      };
+      // 一般行動、朋友時間（和朋友相處的行動另外選，不佔一般行動）
+      const main = list.filter((x) => !x.a.npc);
+      const friends = list.filter((x) => x.a.npc);
+      const selMain = u.selected.filter((id) => !AW.ACTION_MAP[id].npc).length;
+      const selFriend = u.selected.length - selMain;
       const agendaReady = !s.agenda || s.agenda.pick != null;
-      const can = agendaReady && u.selected.length >= Math.min(n, list.filter((x) => x.ok).length) && u.selected.length > 0;
+      const can = agendaReady && selMain >= Math.min(n, main.filter((x) => x.ok).length) && u.selected.length > 0;
       const label = s.phase === 'esports' ? '開始賽季 ▶' : this.hasSeason(s) ? '開始這一年的挑戰 ▶' : '結束這一年 ▶';
+      const friendHtml = fn && friends.length ? `<h4 class="shop-h">👥 朋友時間 <span class="pill ${selFriend === fn ? 'ok' : ''}">${selFriend} / ${fn}</span></h4>
+        <p class="muted small">和朋友相處不佔一般行動，每年可以另外選 ${fn} 個（不選也可以）。${E.FRIEND_EFFECT ? `好友度照常增加，能力與狀態的效果是平常的 ${Math.round(E.FRIEND_EFFECT * 100)}%（卡片上已經換算好）。` : '只會提升好友度，不會改變能力與狀態。'}</p>
+        <div class="action-grid">${friends.map(card).join('')}</div>` : '';
       return `${this.rAgenda(s)}<section class="card">
-        <h3>${s.phase === 'esports' ? '選擇本季的訓練重點' : '選擇今年要做的事'} <span class="pill ${u.selected.length === n ? 'ok' : ''}">${u.selected.length} / ${n}</span></h3>
+        <h3>${s.phase === 'esports' ? '選擇本季的訓練重點' : '選擇今年要做的事'} <span class="pill ${selMain === n ? 'ok' : ''}">${selMain} / ${n}</span></h3>
         <p class="muted small">數值為基礎值，實際成長受天賦、年齡、心情與目前數值（越高越難練）影響。</p>
-        <div class="action-grid">${cards}</div>
+        <div class="action-grid">${main.map(card).join('')}</div>
+        ${friendHtml}
         <div class="row end sticky-go"><button class="btn primary big" data-act="commit" ${can ? '' : 'disabled'}>${label}</button></div>
       </section>`;
     },
@@ -939,7 +950,7 @@
       const html = groups.map(([g, title, hint]) => {
         const rows = list.filter((x) => groupOf(x.it.type) === g).map(({ it, ok, owned, reason }) => `
           <div class="shop-item ${owned ? 'owned' : ''}"><div class="si-icon">${it.icon}</div>
-            <div class="si-body"><b>${esc(it.name)}</b><div class="muted small">${esc(AW.Text.fill(it.desc, s))}</div>
+            <div class="si-body"><b>${esc(it.name)}</b><div class="muted small">${esc(AW.Text.fill(it.desc, s, it.vars && it.vars(s)))}</div>
               ${!ok && !owned && reason ? `<div class="ac-lock">🔒 ${esc(reason)}</div>` : ''}</div>
             ${owned ? '<span class="pill ok">已擁有</span>'
               : `<button class="btn sm ${ok ? 'primary' : ''}" data-act="buy-item" data-id="${it.id}" ${ok ? '' : 'disabled'}>${it.loan ? '頭期 ' : ''}${AW.fmtMoney(AW.Shop.cost(s, it))}</button>`}
@@ -947,7 +958,7 @@
         return rows ? `<h4 class="shop-h">${title} <small>${esc(hint)}</small></h4>${rows}` : '';
       }).join('');
       return `<h3>🛒 道具商店 <span class="pill gold">💰 ${AW.fmtMoney(s.stats.money)}</span></h3>${html}
-        <div class="row end"><button class="btn primary" data-act="close-modal">離開</button></div>`;
+        <div class="row end modal-foot"><button class="btn primary" data-act="close-modal">離開</button></div>`;
     },
 
     // ======================= 理財 =======================
@@ -983,7 +994,7 @@
             <span class="muted small">${esc(AW.tx('second', 'shares_hold_desc', s, { 年齡: h.since }))}</span></div>
           <div class="inv-val"><b class="gold">${AW.fmtMoney(h.div)}／年</b>
             ${open ? `<button class="btn sm" data-act="sell-holding" data-i="${i}">賣掉（${AW.fmtMoney(AW.Second.holdingValue(h))}）</button>` : ''}</div></div>`).join('');
-      const loans = f.loans.map((l) => `<div class="c-row"><span>${esc(AW.tx('finance', 'line_loan_' + l.id, s))}</span><span>每年 ${AW.fmtMoney(l.pay)}・還剩 ${l.left} 年</span></div>`).join('');
+      const loans = f.loans.map((l) => `<div class="c-row"><span>${esc(AW.tx('finance', 'line_loan_' + F.loanKey(l), s))}</span><span>每年 ${AW.fmtMoney(l.pay)}・還剩 ${l.left} 年</span></div>`).join('');
       return `<h3>💰 理財 <span class="pill gold">💰 ${AW.fmtMoney(money)}</span>${f.taxTotal ? `<span class="pill">🧾 累計繳稅 ${AW.fmtMoney(f.taxTotal)}</span>` : ''}</h3>
         <h4 class="shop-h">🏠 生活水準 <small>${F.active(s) ? `今年生活費 ${AW.fmtMoney(F.livingCost(s))}` : '還沒出社會，暫時不用付'}</small></h4>
         <div class="tabs styles">${styles}</div>
@@ -992,9 +1003,59 @@
         ${this.rInvestSummary(s)}
         ${inv}
         ${holds ? `<h4 class="shop-h">📜 公司股份 <small>${esc(AW.tx('second', 'shares_hint', s))}</small></h4>${holds}` : ''}
+        ${this.rEstate(s)}
         ${loans ? `<h4 class="shop-h">🏦 貸款</h4>${loans}` : ''}
         ${E.canFire(s) || s.phase === 'ended' ? '' : (s.age >= 30 ? `<p class="muted small">🏖️ 財富自由目標：35～49 歲時身家 ${AW.fmtMoney(E.fireTarget(s))}（每年開銷 × 25，最少 ${AW.fmtMoney(E.FIRE.min)}），且心情 70 以上</p>` : '')}
-        <div class="row end"><button class="btn primary" data-act="close-modal">關閉</button></div>`;
+        <div class="row end modal-foot"><button class="btn primary" data-act="close-modal">關閉</button></div>`;
+    },
+
+    // 房地產（v2.4）：房市、自住房與豪宅、收租物件（跟劉地主買）
+    rEstate(s) {
+      const ES = AW.Estate;
+      const e = s.estate;
+      const open = AW.Shop.open(s);
+      const t = (key, v) => AW.tx('estate', key, s, v);
+      const homes = ES.homeIds(s);
+      const liu = AW.NPC.met(s, 'liu');
+      if (!homes.length && !e.rentals.length && !liu) return '';
+      // 賣掉：按一次變成「確定賣掉？」，再按一次才賣
+      const sellBtn = (key, v) => {
+        if (!open) return '';
+        const sure = this.ui.sellKey === key;
+        const short = v < 0 && s.stats.money < -v;
+        const label = sure ? t('btn_confirm') : t(v >= 0 ? 'btn_sell' : 'btn_sell_neg', { 金額: AW.fmtMoney(Math.abs(v)) });
+        return `<button class="btn sm ${sure ? 'danger' : ''}" data-act="sell-estate" data-key="${key}" ${short ? 'disabled' : ''}>${esc(label)}</button>`
+          + (short ? `<span class="ac-lock">🔒 ${esc(t('need_cash', { 金額: AW.fmtMoney(-v) }))}</span>` : '');
+      };
+      const row = (name, desc, value, btn) => `<div class="shop-item"><div class="si-body"><b>${esc(name)}</b>
+          <span class="muted small">${desc}</span></div>
+        <div class="inv-val"><b class="gold">${AW.fmtMoney(value)}</b>${btn}</div></div>`;
+      const homeRows = homes.map((id) => {
+        const it = AW.ITEM_MAP[id];
+        const loan = it.loan ? AW.Finance.loanLeft(s, id) : 0;
+        return row(ES.homeName(s, id), loan ? esc(t('loan_desc', { 房貸: AW.fmtMoney(loan) })) : '', ES.homeValue(s, id), sellBtn('home:' + id, ES.homeSellValue(s, id)));
+      }).join('');
+      const rentRows = e.rentals.map((r) => {
+        const loan = AW.Finance.loanLeft(s, ES.loanId(r));
+        const desc = [t('own_desc', { 年齡: r.since, 買價: AW.fmtMoney(r.price) }),
+          t('rent_desc', { 租金: AW.fmtMoney(ES.rent(s, r)), 空租: Math.round(ES.vacancy(s, r) * 100) + '%' })]
+          .concat(loan ? [t('loan_desc', { 房貸: AW.fmtMoney(loan) })] : []).map(esc).join('<br>');
+        return row(ES.kindName(s, r.kind), desc, ES.rentalValue(s, r), sellBtn('rent:' + r.uid, ES.rentalSellValue(s, r)));
+      }).join('');
+      // 跟劉地主買收租物件
+      const buys = liu ? Object.keys(ES.KINDS).map((kind) => {
+        const st = ES.rentalState(s, kind);
+        return `<div class="shop-item"><div class="si-body"><b>${esc(ES.kindName(s, kind))}</b>
+            <span class="muted small">${esc(t('kind_' + kind + '_desc'))}</span>
+            ${st.ok ? '' : `<div class="ac-lock">🔒 ${esc(st.reason)}</div>`}</div>
+          <div class="inv-val"><b class="gold">${AW.fmtMoney(ES.buyPrice(s, ES.KINDS[kind].base))}</b>
+            <button class="btn sm ${st.ok ? 'primary' : ''}" data-act="buy-rental" data-kind="${kind}" ${st.ok ? '' : 'disabled'}>${esc(t('btn_buy', { 金額: AW.fmtMoney(ES.downPayment(s, kind)) }))}</button></div></div>`;
+      }).join('') : `<p class="muted small">${esc(t('need_meet'))}</p>`;
+      const market = ES.started(s) ? t('market', { 指數: e.idx.toFixed(2), 漲跌: ES.fmtPct(e.last) }) : t('market_wait');
+      const hint = e.hint ? `<p class="small">${esc(t('liu_' + e.hint.cat))}</p>` : '';
+      return `<h4 class="shop-h">${esc(t('title'))} <small>${esc(market)}</small></h4>
+        <p class="muted small">${esc(t('hint'))}</p>${hint}
+        ${homeRows}${rentRows}${buys}`;
     },
 
     // 投資總覽：市值、成本、未實現損益、已實現損益
@@ -1035,9 +1096,9 @@
       const unmet = AW.NPC_ORDER.length - AW.NPC.metList(s).length;
       const rival = s.rival ? `<p class="muted small">🔥 宿敵王選手：${esc(s.rival.team)}（${AW.Esports.TIERS[s.rival.tier].name}），你的戰績 ${s.rival.w} 勝 ${s.rival.l} 敗</p>` : '';
       return `<h3>👥 朋友</h3>
-        <p class="muted small">「🎮 揪團開黑」可以提升開黑朋友的好友度（胡投顧只加一半，主要靠「💹 找胡投顧聊投資」或交際類行動）；太久沒聯絡，好友度會慢慢下降（人緣 60 以上下降較慢）。${unmet ? `還有 ${unmet} 位朋友沒認識，人緣越高越容易遇到。` : ''}</p>
+        <p class="muted small">每年的「👥 朋友時間」可以另外選一個和朋友相處的行動，不佔一般行動。「🎮 揪團開黑」可以提升開黑朋友的好友度（胡投顧只加一半，主要靠「💹 找胡投顧聊投資」或交際類行動）；太久沒聯絡，好友度會慢慢下降（人緣 60 以上下降較慢）。${unmet ? `還有 ${unmet} 位朋友沒認識，人緣越高越容易遇到。` : ''}</p>
         ${rival}${cards}
-        <div class="row end"><button class="btn primary" data-act="close-modal">關閉</button></div>`;
+        <div class="row end modal-foot"><button class="btn primary" data-act="close-modal">關閉</button></div>`;
     },
 
     // ======================= 賭場 =======================
@@ -1163,7 +1224,8 @@
             <li>😊 <b>心情</b> ≥ 70 成長 +10%；低於 40 成長變慢、擲骰 -5%；太低可能陷入憂鬱。</li>
             <li>📉 健康和心情越接近滿值越難再往上補，要靠長期好好休息。</li>
             <li>💰 <b>理財</b>（18 歲起）：出社會後要繳所得稅、付生活費；可以選擇生活水準、投資、買房。存款變負數會開始負債，太久還不出來就會破產。</li>
-            <li>👥 <b>朋友</b>：人緣越高，越容易認識朋友。「揪團開黑」可以提升好友度，好朋友會在關鍵時刻幫你一把。</li>
+            <li>🏘️ <b>房地產</b>：房價每年隨房市漲跌，房子可以在理財畫面賣掉。認識內湖的大地主劉地主之後，還可以跟他買收租物件，每年收租金。</li>
+            <li>👥 <b>朋友</b>：人緣越高，越容易認識朋友。每年有一次「朋友時間」，可以另外選一個和朋友相處的行動（揪團開黑、去阿方家吃飯、陪劉地主泡茶……），不佔一般行動。好朋友會在關鍵時刻幫你一把。</li>
             <li>🏁 結局會依一生的平均健康與心情評等，評等高可多拿傳承點。35～49 歲時身家夠多、心情好，可以選擇「財富自由」提早退休。</li>
             <li>📈 能力越高越難練，FPS / DOTA 在 6～15 歲成長最快，反應力在 12 歲前成長最快。</li>
             <li>🛒 <b>道具商店</b>：用金錢買裝備（永久成長加成）、消耗品、額外行動數、幸運御守；有交往對象時還能買禮物。</li>
@@ -1191,7 +1253,11 @@
       },
 
       // 理財
-      finance() { if (AW.Shop.open(this.S) && AW.Finance.canManage(this.S)) this.modal(this.rFinance(), 'wide'); },
+      finance() {
+        if (!AW.Shop.open(this.S) || !AW.Finance.canManage(this.S)) return;
+        this.ui.sellKey = null;
+        this.modal(this.rFinance(), 'wide');
+      },
       'set-style'(d) {
         if (!AW.Shop.open(this.S)) return;
         if (AW.Finance.setStyle(this.S, Number(d.i))) this.render();
@@ -1205,6 +1271,22 @@
       withdraw(d) {
         if (!AW.Finance.withdraw(this.S, d.id, d.a === 'all' ? 'all' : Number(d.a))) return;
         this.render();
+        this.modalUpdate(this.rFinance(), 'wide');
+      },
+      'buy-rental'(d) {
+        if (!AW.Estate.buyRental(this.S, d.kind)) return;
+        this.ui.sellKey = null;
+        this.render();
+        this.modalUpdate(this.rFinance(), 'wide');
+      },
+      // 賣房：第一次按只會變成「確定賣掉？」
+      'sell-estate'(d) {
+        const s = this.S;
+        if (this.ui.sellKey !== d.key) { this.ui.sellKey = d.key; this.modalUpdate(this.rFinance(), 'wide'); return; }
+        this.ui.sellKey = null;
+        const [type, id] = d.key.split(':');
+        const ok = type === 'home' ? AW.Estate.sellHome(s, id) : !!AW.Estate.sellRental(s, Number(id));
+        if (ok) this.render();
         this.modalUpdate(this.rFinance(), 'wide');
       },
       'sell-holding'(d) {
@@ -1346,12 +1428,18 @@
       // 行動
       toggle(d) {
         const u = this.ui;
-        const n = E.slots(this.S);
+        const a = AW.ACTION_MAP[d.id];
+        if (!a) return;
+        // 一般行動和朋友時間各自計算名額，滿了就換掉最早選的那一個
+        const n = a.npc ? E.friendSlots(this.S) : E.slots(this.S);
+        if (!n) return;
+        const same = (id) => !!AW.ACTION_MAP[id].npc === !!a.npc;
         u.selected = u.selected || [];
         const i = u.selected.indexOf(d.id);
         if (i >= 0) u.selected.splice(i, 1);
         else {
-          if (u.selected.length >= n) u.selected.shift();
+          const group = u.selected.filter(same);
+          if (group.length >= n) u.selected.splice(u.selected.indexOf(group[0]), 1);
           u.selected.push(d.id);
         }
         this.render();

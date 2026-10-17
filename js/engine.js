@@ -213,6 +213,8 @@
       if (s.wishes === undefined) s.wishes = null;
       // v2.3：保留的公司股份
       s.holdings = s.holdings || [];
+      // v2.4：房市、收租物件
+      AW.Estate.init(s);
     },
 
     // ---------- 階段 ----------
@@ -239,6 +241,18 @@
       n = Math.max(1, n);
       if (s.yearFlags.extraSlot) n += 1;
       return n;
+    },
+    // 朋友時間：和朋友相處的行動（npc: true）另外選，不佔一般行動；能力與狀態效果 × FRIEND_EFFECT（好友度照算）
+    // 0 = 只加好友度（模擬中 0.15～0.3 會讓世界冠軍、大老闆的機率高出一截）
+    FRIEND_SLOTS: 1,
+    FRIEND_EFFECT: 0,
+    friendSlots(s) { return this.availableActions(s).some((x) => x.a.npc) ? this.FRIEND_SLOTS : 0; },
+    actionEffects(s, a) {
+      const eff = AW.val(a.effects, s);
+      if (!eff || !a.npc) return eff;
+      const out = {};
+      for (const k of Object.keys(eff)) out[k] = AW.val(eff[k], s) * this.FRIEND_EFFECT;
+      return out;
     },
     title(s) {
       if (s.phase === 'second') return AW.Second.title(s);
@@ -392,15 +406,15 @@
 
     commitActions(s, ids) {
       if (s.step !== 'action') return null;
-      const n = this.slots(s);
-      const list = ids.slice(0, n).map((id) => AW.ACTION_MAP[id]).filter((a) => a && this.actionState(s, a).ok);
+      const picked = ids.map((id) => AW.ACTION_MAP[id]).filter((a) => a && this.actionState(s, a).ok);
+      const list = picked.filter((a) => !a.npc).slice(0, this.slots(s)).concat(picked.filter((a) => a.npc).slice(0, this.friendSlots(s)));
       s.yearPerf = s.yearFlags.perf || 0;
       s.yearSp = s.yearFlags.sp || 0;
       const results = [];
       for (const a of list) {
         const cost = this.actionCost(s, a);
         const deltas = cost ? AW.applyEffects(s, { money: -cost }) : {};
-        AW.mergeDeltas(deltas, AW.applyEffects(s, a.effects));
+        AW.mergeDeltas(deltas, AW.applyEffects(s, this.actionEffects(s, a)));
         if (a.income) AW.mergeDeltas(deltas, AW.Finance.earn(s, AW.val(a.income, s)));
         let text = '';
         let bonds = [];
@@ -775,6 +789,7 @@
     finish(s, endingId) {
       if (s.phase === 'ended') return s.ending;
       AW.Finance.liquidate(s);
+      AW.Estate.liquidate(s);
       // 保留的公司股份也換成現金（算進遺產）
       while (s.holdings && s.holdings.length) AW.Second.sellHolding(s, 0);
       const life = this.lifeAvg(s);

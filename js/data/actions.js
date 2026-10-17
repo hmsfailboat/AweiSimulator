@@ -5,6 +5,7 @@
  * tags: game → 被「禁止打電動」時不可選；hideLocked: 條件不符時直接隱藏（不顯示鎖頭）
  * perf: 工程師年度績效加成；sp: 創業衝刺點數
  * cost: 金錢花費（數字或 (s) => 數字）；income: 職涯收入（會計入所得稅）
+ * npc: 和朋友相處的行動，放在「朋友時間」另外選（每年 Engine.FRIEND_SLOTS 個），不佔一般行動
  * run(s): 特殊效果，回傳 { text, deltas }
  * 名稱、說明等文字在 js/data/texts.js 的 [action.代號]
  */
@@ -163,7 +164,7 @@
       run(s) { return AW.Engineer.startStartup(s); } },
 
     // ---------------- 朋友（認識開黑朋友後） ----------------
-    { id: 'squad', stages: ['elem', 'junior', 'senior', 'extra', 'pro', 'uni', 'job', 'startup'].concat(SECOND), tags: ['game'],
+    { id: 'squad', npc: true, stages: ['elem', 'junior', 'senior', 'extra', 'pro', 'uni', 'job', 'startup'].concat(SECOND), tags: ['game'],
       cond: (s) => AW.NPC.squadMembers(s).length > 0, hideLocked: true,
       effects: { mood: 8, best: 2, social: 2, health: -2 },
       run(s) { return { text: '', deltas: {}, bonds: AW.NPC.squad(s) }; } },
@@ -181,7 +182,7 @@
       } },
 
     // ---------------- 朋友：胡投顧 ----------------
-    { id: 'hu_chat', stages: ['extra', 'pro', 'uni', 'job', 'startup'].concat(SECOND, 'elder'), hideLocked: true,
+    { id: 'hu_chat', npc: true, stages: ['extra', 'pro', 'uni', 'job', 'startup'].concat(SECOND, 'elder'), hideLocked: true,
       cond: (s) => s.age >= 18 && AW.NPC.met(s, 'hu'),
       effects: { mood: 3, study: 1, social: 1 },
       run(s) {
@@ -190,7 +191,7 @@
       } },
 
     // ---------------- 朋友：阿方、Corey（v2.3） ----------------
-    { id: 'fang_meal', stages: TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', SECOND, 'elder'), hideLocked: true,
+    { id: 'fang_meal', npc: true, stages: TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', SECOND, 'elder'), hideLocked: true,
       cond: (s) => AW.NPC.met(s, 'fang'),
       effects: { health: 8, mood: 5 },
       run(s) {
@@ -198,7 +199,7 @@
         return { text: AW.tx('action.fang_meal', 'msg', s), bonds: v ? [{ id: 'fang', v }] : [] };
       } },
     // Corey 打輔助很細心：跟他雙排練默契
-    { id: 'corey_duo', stages: TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', SECOND, 'elder'), tags: ['game'], hideLocked: true,
+    { id: 'corey_duo', npc: true, stages: TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', SECOND, 'elder'), tags: ['game'], hideLocked: true,
       cond: (s) => AW.NPC.met(s, 'corey'),
       effects: { main: 3, teamwork: 5, mood: 4, health: -1 },
       run(s) {
@@ -207,7 +208,7 @@
       } },
 
     // ---------------- 朋友：KE、發哥（v2.3） ----------------
-    { id: 'ke_fight', stages: TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', SECOND, 'elder'), tags: ['game'], hideLocked: true,
+    { id: 'ke_fight', npc: true, stages: TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', SECOND, 'elder'), tags: ['game'], hideLocked: true,
       cond: (s) => AW.NPC.met(s, 'ke'),
       effects: { reflex: 4, mood: 5, health: -1 },
       run(s) {
@@ -226,6 +227,17 @@
         if (stage === 'streamer') { s.second.subs = Math.round(s.second.subs * 1.08); key = 'msg_streamer'; }
         if (stage === 'startup' || stage === 'biz') { s.yearSp += 2; key = 'msg_biz'; }
         return { text: AW.tx('action.fa_promo', key, s), bonds: v ? [{ id: 'fa', v }] : [] };
+      } },
+
+    // ---------------- 朋友：劉地主（v2.4） ----------------
+    // 去他家泡茶：成年後他會透露明年的房市（好友度越高越準）
+    { id: 'liu_tea', npc: true, stages: TEEN.concat('extra', 'pro', 'uni', 'job', 'startup', SECOND, 'elder'), hideLocked: true,
+      cond: (s) => AW.NPC.met(s, 'liu'),
+      effects: { mood: 4, social: 2 },
+      run(s) {
+        const v = AW.NPC.addBond(s, 'liu', AW.NPC_BOND.chat * (1 + s.stats.social / 200));
+        const key = AW.Estate.started(s) ? 'msg_' + AW.Estate.hint(s) : 'msg';
+        return { text: AW.tx('action.liu_tea', key, s), bonds: v ? [{ id: 'liu', v }] : [] };
       } },
 
     // ---------------- 感情、家庭（v2.0） ----------------
@@ -280,7 +292,7 @@
         if (AW.chance(0.15)) { s.flags.bigFish = 1; return { text: AW.tx('action.fishing', 'msg_big', s) }; }
         return { text: '' };
       } },
-    { id: 'elder_squad', stages: OLD, tags: ['game'], cond: (s) => AW.NPC.squadMembers(s).length > 0, hideLocked: true,
+    { id: 'elder_squad', npc: true, stages: OLD, tags: ['game'], cond: (s) => AW.NPC.squadMembers(s).length > 0, hideLocked: true,
       effects: { mood: 10, best: 1 }, run(s) { return { text: '', deltas: {}, bonds: AW.NPC.squad(s) }; } },
     { id: 'charity', stages: OLD.concat('biz', 'chairman'), cond: (s) => s.stats.money >= 1000000,
       run(s) {

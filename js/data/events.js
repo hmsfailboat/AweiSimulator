@@ -38,6 +38,12 @@
   const dealCost = (s) => 20000000 * (s.second.stage + 1);
   const brandFee = (s) => AW.clamp(Math.round(s.second.subs * 2 / 10000) * 10000, 300000, 8000000);
   const platformFee = (s) => AW.clamp(Math.round(s.second.subs * 5 / 10000) * 10000, 2000000, 20000000);
+  // 劉地主（v2.4）：收租物件、自住房的市值、合建案金額
+  const rentals = (s) => (s.estate ? s.estate.rentals : []);
+  const firstRent = (s) => (rentals(s).length ? AW.Estate.rent(s, rentals(s)[0]) : 0);
+  const houseValue = (s) => (s.items && s.items.house ? AW.Estate.homeValue(s, 'house') : 0);
+  const renewal = (s, k) => Math.round(houseValue(s) * k / 10000) * 10000;
+  const LAND = { cost: 20000000, years: 4, chance: 0.75, win: 1.8, lose: 0.8 };
   const heirKid = (s) => s.kids.find((k) => AW.Family.age(s, k) >= 22);
   // 朋友的婚禮：今年結婚的朋友（每位朋友一次）
   const weddingFriend = (s) => {
@@ -1213,6 +1219,7 @@
         { cond: (s) => s.items.car, hideLocked: true, effects: { mood: -6 }, run: (s) => ({ deltas: AW.Shop.sell(s, 'car') }) },
         { cond: (s) => s.items.house, hideLocked: true, effects: { mood: -8 }, run: (s) => ({ deltas: AW.Shop.sell(s, 'house') }) },
         { cond: (s) => s.items.mansion, hideLocked: true, effects: { mood: -10 }, run: (s) => ({ deltas: AW.Shop.sell(s, 'mansion') }) },
+        { cond: (s) => rentals(s).length > 0, hideLocked: true, effects: { mood: -6 }, run: (s) => ({ deltas: AW.Estate.sellAllRentals(s) }) },
         { cond: (s) => bond(s, 'hu') >= 60, hideLocked: true, effects: (s) => ({ money: -s.stats.money, mood: 2 }), bond: { hu: -15 } },
         { cond: (s) => bond(s, 'haji') >= 50 && !s.flags.renewal, hideLocked: true,
           effects: (s) => ({ money: -Math.round(s.stats.money / 2), mood: -5, fame: -5 }), bond: { haji: 5 },
@@ -1592,6 +1599,85 @@
           fail: { effects: { mood: 10 }, bond: { wang: 10 }, run: (s) => { AW.Second.completeWish(s, 'rival_match'); } } } },
         { effects: { mood: 12 }, bond: { wang: 12 }, run: (s) => { AW.Second.completeWish(s, 'rival_match'); } },
       ] },
+
+    // ======================= 新朋友：劉地主（v2.4） =======================
+    // 跟著劉地主去收租
+    { id: 'liu_rent_day', phase: 'any', weight: 5, cond: (s) => s.age >= 16 && met('liu')(s),
+      choices: [
+        { effects: { social: 2, mood: 3 }, bond: { liu: 5 } },
+        { bond: { liu: -2 } },
+      ] },
+    // 土地公生日
+    { id: 'liu_temple', phase: 'any', weight: 4, cond: (s) => s.age >= 15 && met('liu')(s),
+      choices: [
+        { effects: { mood: 4, health: 1 }, bond: { liu: 4 } },
+        { cond: (s) => s.stats.money >= 6000, effects: { money: -6000, mood: 3 }, bond: { liu: 7 } },
+      ] },
+    // 颱風天內湖淹水
+    { id: 'liu_flood', phase: 'any', weight: 3, cond: (s) => s.age >= 18 && met('liu')(s),
+      choices: [
+        { effects: { health: -4, mood: 2 }, bond: { liu: 10 } },
+        { bond: { liu: 1 } },
+      ] },
+    // 劉地主繼承家業
+    { id: 'liu_inherit', phase: 'any', once: true, weight: 5, cond: (s) => s.age >= 30 && s.age <= 50 && met('liu')(s),
+      choices: [
+        { effects: { mood: 6, health: -1 }, bond: { liu: 5 } },
+        { cond: (s) => s.stats.money >= 36000, effects: { money: -36000, mood: 2 }, bond: { liu: 8 } },
+      ] },
+    // 劉媽媽幫你介紹相親
+    { id: 'liu_matchmaking', phase: 'any', once: true, weight: 5,
+      cond: (s) => s.age >= 24 && s.age <= 40 && single(s) && met('liu')(s) && bond(s, 'liu') >= 40,
+      choices: [
+        { roll: { chance: (s) => AW.clamp(0.35 + s.stats.social / 200, 0.35, 0.85),
+          success: { effects: { mood: 8 }, bond: { liu: 3 }, run: startLove },
+          fail: { effects: { mood: -3 } } } },
+        { bond: { liu: -2 } },
+      ] },
+    // 收租物件的房客欠租
+    { id: 'liu_tenant', phase: 'any', weight: 6, cond: (s) => rentals(s).length > 0 && met('liu')(s),
+      vars: (s) => ({ 租金: AW.fmtMoney(firstRent(s)) }),
+      choices: [
+        { cond: (s) => bond(s, 'liu') >= AW.LIU.dealBond, hideLocked: true, effects: { mood: 2 }, bond: { liu: 3 } },
+        { roll: { chance: (s) => AW.clamp(s.stats.social / 100, 0.25, 0.85),
+          success: { effects: { mood: 3, social: 1 } },
+          fail: { effects: (s) => ({ money: -firstRent(s), mood: -4 }) } } },
+        { effects: (s) => ({ money: -firstRent(s), mood: -2 }) },
+      ] },
+    // 自住房被劃進都更範圍（買了 5 年以上）
+    { id: 'liu_renewal', phase: 'any', once: true, weight: 6,
+      cond: (s) => s.age >= 35 && s.items && s.items.house && s.age - (s.itemSince.house != null ? s.itemSince.house : s.age) >= 5,
+      vars: (s) => ({ 同意: AW.fmtMoney(renewal(s, 0.2)), 談判: AW.fmtMoney(renewal(s, 0.35)) }),
+      choices: [
+        { effects: (s) => ({ money: renewal(s, 0.2), mood: 4 }) },
+        { roll: { chance: 0.4,
+          success: { effects: (s) => ({ money: renewal(s, 0.5), mood: 6 }) },
+          fail: { effects: (s) => ({ money: renewal(s, 0.1), fame: -3, mood: -8 }) } } },
+        { cond: (s) => met('liu')(s) && bond(s, 'liu') >= 50, hideLocked: true,
+          effects: (s) => ({ money: renewal(s, 0.35), mood: 5 }), bond: { liu: 4 } },
+      ] },
+    // 合建案：投資 LAND.cost，LAND.years 年後回收
+    { id: 'liu_land', phase: 'any', once: true, weight: 6,
+      cond: (s) => s.age >= 30 && s.age <= 55 && met('liu')(s) && bond(s, 'liu') >= AW.LIU.landBond && s.stats.money >= LAND.cost,
+      vars: () => ({ 金額: AW.fmtMoney(LAND.cost), 年數: LAND.years }),
+      choices: [
+        { effects: { money: -LAND.cost, mood: 2 }, bond: { liu: 5 }, run: (s) => { s.npcs.liu.deal = { amt: LAND.cost, at: s.age }; } },
+        { bond: { liu: -2 } },
+      ] },
+    { id: 'liu_land_done', phase: 'any', weight: 200,
+      cond: (s) => met('liu')(s) && s.npcs.liu.deal && s.age - s.npcs.liu.deal.at >= LAND.years,
+      run: (s) => {
+        const amt = s.npcs.liu.deal.amt;
+        s.npcs.liu.deal = null;
+        if (AW.chance(LAND.chance)) {
+          s.flags.liuLand = 1;
+          const v = Math.round(amt * LAND.win);
+          return { text: AW.tx('event.liu_land_done', 'msg_ok', s, { 金額: AW.fmtMoney(v) }), deltas: AW.applyEffects(s, { money: v, mood: 12 }),
+            bonds: [{ id: 'liu', v: AW.NPC.addBond(s, 'liu', 5) }] };
+        }
+        const v = Math.round(amt * LAND.lose);
+        return { text: AW.tx('event.liu_land_done', 'msg_bad', s, { 金額: AW.fmtMoney(v) }), deltas: AW.applyEffects(s, { money: v, mood: -4 }) };
+      } },
 
     // ======================= 賭博 =======================
     { id: 'gamble_paparazzi', phase: 'any', once: true, weight: 12,

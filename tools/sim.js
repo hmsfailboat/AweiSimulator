@@ -12,7 +12,7 @@ const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const FILES = ['js/core.js', 'js/text.js', 'js/data/texts.js', 'js/data/traits.js', 'js/data/actions.js', 'js/data/events.js',
   'js/data/items.js', 'js/data/npcs.js', 'js/data/meta.js', 'js/engine.js', 'js/love.js', 'js/shop.js', 'js/finance.js',
-  'js/npcs.js', 'js/office.js', 'js/family.js', 'js/second.js', 'js/esports.js', 'js/engineer.js'];
+  'js/estate.js', 'js/npcs.js', 'js/office.js', 'js/family.js', 'js/second.js', 'js/esports.js', 'js/engineer.js'];
 const ctx = { console, Math, Date, JSON };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
@@ -48,7 +48,8 @@ const N = +process.argv.filter((a) => !a.startsWith('--'))[2] || (META ? 200 : 2
 const R = Math.random;
 
 function pickActions(s, prefs, grind) {
-  const avail = E.availableActions(s).filter((x) => x.ok).map((x) => x.a.id);
+  const all = E.availableActions(s).filter((x) => x.ok).map((x) => x.a);
+  const avail = all.filter((a) => !a.npc).map((a) => a.id);
   const n = E.slots(s);
   const out = [];
   const st = s.stats;
@@ -63,6 +64,13 @@ function pickActions(s, prefs, grind) {
   while (out.length < n && avail.length > out.length) {
     const id = avail[Math.floor(R() * avail.length)];
     if (!out.includes(id)) out.push(id);
+  }
+  // 朋友時間：健康差先去阿方家吃飯，否則一半機率揪團開黑、一半隨機找一位朋友
+  const fr = all.filter((a) => a.npc).map((a) => a.id);
+  if (E.friendSlots(s) && fr.length) {
+    if (!grind && st.health < 45 && fr.includes('fang_meal')) out.push('fang_meal');
+    else if (fr.includes('squad') && R() < 0.5) out.push('squad');
+    else out.push(fr[Math.floor(R() * fr.length)]);
   }
   return out;
 }
@@ -118,6 +126,11 @@ function shopAll(s) {
     const want = F.STYLES.map((x, i) => i).filter((i) => s.stats.money >= F.STYLES[i].cost * 20).pop();
     if (want != null && want > s.fin.style) F.setStyle(s, want);
     if (s.stats.money > 2000000) F.invest(s, 'etf', Math.round(s.stats.money * 0.5));
+  }
+  // 收租物件：頭期款的 5 倍存款才買（先買辦公室）
+  for (const kind of ['office', 'suite']) {
+    if (AW.Estate.rentalState(s, kind).ok && s.stats.money >= AW.Estate.downPayment(s, kind) * 5
+      && AW.Estate.buyRental(s, kind)) s.simRentals = (s.simRentals || 0) + 1;
   }
   // 雇用朋友：年薪的 10 倍存款才請（先請高階的）
   for (const job of ['chef', 'guard', 'bento', 'bodyguard']) {
@@ -251,6 +264,9 @@ function playRun(strat, opts) {
   res.tax = s.fin.taxTotal;
   res.debt = s.flags.debt ? 1 : 0;
   res.npcs = Object.keys(s.npcs).length;
+  res.liu = s.npcs.liu ? 1 : 0;
+  res.rentals = s.simRentals || 0;
+  res.idx = s.estate.idx;
   res.shares = s.simShares || 0;
   res.holdings = s.simKeep || 0;
   if (s.rival) res.h2h = s.rival.w + s.rival.l;
@@ -368,6 +384,7 @@ for (const strat of Object.keys(STRATS)) {
       console.log(`  第二幕職業 ${JSON.stringify(jobs)}｜人生終章 ${JSON.stringify(lifeEnd)}`);
       console.log(`  結局時有阿方健康餐 ${pct(by((r) => r.meal), N)}，其中慢性病 ${pct(by((r) => r.meal && r.chronic), by((r) => r.meal))}；沒有的慢性病 ${pct(by((r) => !r.meal && r.chronic), by((r) => !r.meal))}`);
       console.log(`  公司股份：處理過 ${pct(by((r) => r.shares > 0), N)}  選擇保留 ${pct(by((r) => r.holdings > 0), N)}`);
+      console.log(`  房地產：認識劉地主 ${pct(by((r) => r.liu), N)}  買過收租物件 ${pct(by((r) => r.rentals > 0), N)}（平均 ${avg(runs.filter((r) => r.rentals), 'rentals')} 間）  結局時房價指數平均 ${avg(runs, 'idx')}`);
       const stuck = runs.filter((r) => r.stuck);
       if (stuck.length) console.log(`  ⚠️ 卡住 ${stuck.length} 局：${JSON.stringify(stuck.slice(0, 3).map((r) => r.stuck))}`);
     }

@@ -70,10 +70,15 @@
     },
 
     hasHome(s) { return !!(s.items && (s.items.house || s.items.mansion)); },
+    // 有自己的房子不用付房租；沒有的話，跟劉地主租房子算友情價
+    rentMult(s) {
+      if (this.hasHome(s)) return 0.6;
+      return AW.NPC.bond(s, 'liu') >= AW.LIU.rentBond ? AW.LIU.rentMult : 1;
+    },
     livingCost(s) {
       let c = STYLES[s.fin.style].cost;
       if (s.phase === 'esports') c *= 0.5; // 戰隊宿舍
-      if (this.hasHome(s)) c *= 0.6;        // 不用付房租
+      c *= this.rentMult(s);
       c += AW.Family.upkeep(s);              // 孩子的養育費
       return Math.round(c);
     },
@@ -106,6 +111,8 @@
         a + (l.rate ? l.pay * (1 - Math.pow(1 + l.rate, -l.left)) / l.rate : l.pay * l.left), 0));
     },
     dropLoans(s, id) { s.fin.loans = s.fin.loans.filter((l) => l.id !== id); },
+    // 收支表、理財畫面用的貸款名稱（每間收租物件各有一筆房貸，名稱合併）
+    loanKey(l) { return l.id.indexOf('estate:') === 0 ? 'estate' : l.id; },
     sharks(s) { return s.fin.loans.filter((l) => l.id === 'shark').length; },
     canShark(s) { return this.canManage(s) && this.sharks(s) < SHARK.max && AW.Shop.open(s); },
     borrowShark(s) {
@@ -121,7 +128,8 @@
     productOk(s, id) { const p = PRODUCTS[id]; return !!p && (!p.need || p.need(s)); },
     invested(s) { return Object.values(s.fin.inv).reduce((a, v) => a + v, 0); },
     investCost(s) { return Object.keys(s.fin.inv).reduce((a, id) => a + (s.fin.cost[id] || 0), 0); },
-    netWorth(s) { return s.stats.money + this.invested(s); },
+    // 身家：現金 + 投資 + 收租物件的淨值（自住房不算）
+    netWorth(s) { return s.stats.money + this.invested(s) + AW.Estate.equity(s); },
     // 單一商品的未實現損益 { v 市值, cost 成本, pl 損益, pct 報酬率 }
     position(s, id) {
       const v = s.fin.inv[id] || 0;
@@ -239,6 +247,13 @@
         AW.applyEffects(s, { money: div });
         y.lines.push({ key: 'dividend', v: div });
       }
+      // 房市漲跌、收租物件的租金（計入所得）
+      const rent = AW.Estate.yearEnd(s);
+      if (rent) {
+        f.income += rent;
+        AW.applyEffects(s, { money: rent });
+        y.lines.push({ key: 'rent', v: rent });
+      }
       if (this.active(s)) {
         const tax = this.tax(f.income);
         if (tax) { pay('tax', tax); f.taxTotal += tax; }
@@ -264,11 +279,14 @@
         pay('staff_' + id, st.salary);
         AW.applyEffects(s, st.yearly);
       }
-      // 貸款
+      // 貸款（同一種合併成一行）
+      const loanPay = {};
       for (const l of f.loans) {
-        pay('loan_' + l.id, l.pay);
+        const k = this.loanKey(l);
+        loanPay[k] = (loanPay[k] || 0) + l.pay;
         l.left -= 1;
       }
+      for (const k of Object.keys(loanPay)) pay('loan_' + k, loanPay[k]);
       f.loans = f.loans.filter((l) => l.left > 0);
 
       // 現金不夠時，自動贖回投資補足（先賣報酬最穩的）
@@ -308,7 +326,7 @@
 
     // 每年固定開銷（生活費、維護費、雇員、貸款），用來判斷財富自由
     yearlySpend(s) {
-      let v = STYLES[s.fin.style].cost * (this.hasHome(s) ? 0.6 : 1) + AW.Family.upkeep(s);
+      let v = STYLES[s.fin.style].cost * this.rentMult(s) + AW.Family.upkeep(s);
       for (const id of Object.keys(s.items || {})) { const it = AW.ITEM_MAP[id]; if (it && it.upkeep) v += it.upkeep; }
       for (const id of Object.keys(s.staff || {})) v += AW.STAFF[id].salary;
       for (const l of s.fin.loans) v += l.pay;

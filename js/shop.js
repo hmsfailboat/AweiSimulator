@@ -105,10 +105,11 @@
       return k < 0.2 ? 0 : k;
     },
 
-    // 變賣：拿回部分價錢，房子要先還清房貸
+    // 變賣：拿回部分價錢，房子要先還清房貸（房地產依目前市值計算）
     sellValue(s, id) {
       const it = AW.ITEM_MAP[id];
       if (!it || !it.sell || !this.owned(s, id)) return 0;
+      if (it.estate) return AW.Estate.homeSellValue(s, id);
       return Math.round(this.price(s, it) * it.sell - (it.loan ? AW.Finance.loanLeft(s, id) : 0));
     },
     sell(s, id) {
